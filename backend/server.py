@@ -1103,6 +1103,14 @@ async def execute_browser_action(ws_endpoint: str, action: Dict[str, Any]) -> Op
                         extracted[selector] = text_content.strip() if text_content else ""
                 logger.info(f"Extracted data: {extracted}")
                 
+            elif action_type == "scroll":
+                direction = action.get("direction", "down")
+                if direction == "down":
+                    await page.evaluate("window.scrollBy(0, window.innerHeight)")
+                elif direction == "up":
+                    await page.evaluate("window.scrollBy(0, -window.innerHeight)")
+                await asyncio.sleep(1)
+                
             elif action_type == "screenshot":
                 # Just take a screenshot without any specific action
                 await asyncio.sleep(1)
