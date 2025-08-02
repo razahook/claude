@@ -1030,6 +1030,20 @@ async def get_vnc_info():
     return browser_agent.get_vnc_info()
 
 
+@api_router.get("/chat-history/{session_id}")
+async def get_chat_history(session_id: str):
+    """Get chat history for a session"""
+    try:
+        messages = await db.chat_messages.find(
+            {"session_id": session_id}
+        ).sort("timestamp", 1).to_list(100)
+        
+        return [ChatMessage(**msg) for msg in messages]
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
+
+
 @api_router.get("/projects/{session_id}")
 async def get_projects(session_id: str):
     """Get all projects for a session"""
