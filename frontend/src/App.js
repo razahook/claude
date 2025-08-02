@@ -287,6 +287,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showBrowser, setShowBrowser] = useState(false);
+  const [projects, setProjects] = useState([]);
 
   useEffect(() => {
     // Generate session ID on mount
@@ -326,6 +327,7 @@ export default function App() {
     setScreenshot(null);
     setSessionId(generateSessionId());
     setShowBrowser(false);
+    setProjects([]);
   };
 
   const handleScreenshotUpdate = (newScreenshot) => {
@@ -336,30 +338,42 @@ export default function App() {
     setShowBrowser(needsBrowser);
   };
 
+  const handleProjectCreated = (projectData) => {
+    setProjects(prev => [...prev, projectData]);
+  };
+
   return (
     <div className="app">
       <div className="app-header">
         <div className="app-title">
           <span className="title-icon">⚡</span>
-          AI Browser Terminal
+          AI Full-Stack Developer
         </div>
-        <div className="session-controls">
-          {!wsEndpoint ? (
-            <button 
-              className="control-btn start-session" 
-              onClick={createSession}
-              disabled={loading}
-            >
-              {loading ? "Starting..." : "Start Session"}
-            </button>
-          ) : (
-            <button 
-              className="control-btn end-session" 
-              onClick={endSession}
-            >
-              End Session
-            </button>
+        <div className="header-info">
+          {projects.length > 0 && (
+            <div className="project-count">
+              <span className="project-icon">🚀</span>
+              {projects.length} project{projects.length !== 1 ? 's' : ''}
+            </div>
           )}
+          <div className="session-controls">
+            {!wsEndpoint ? (
+              <button 
+                className="control-btn start-session" 
+                onClick={createSession}
+                disabled={loading}
+              >
+                {loading ? "Starting..." : "Start Session"}
+              </button>
+            ) : (
+              <button 
+                className="control-btn end-session" 
+                onClick={endSession}
+              >
+                End Session
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -370,6 +384,25 @@ export default function App() {
         </div>
       )}
 
+      {projects.length > 0 && (
+        <div className="projects-bar">
+          <div className="projects-header">
+            <span className="projects-title">Created Projects:</span>
+          </div>
+          <div className="projects-list">
+            {projects.map((project, index) => (
+              <div key={index} className="project-item">
+                <span className="project-name">{project.project_name}</span>
+                <span className="project-template">{project.template}</span>
+                {project.sandbox_urls && Object.keys(project.sandbox_urls).length > 0 && (
+                  <span className="project-status">🟢 Deployed</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={`app-body ${showBrowser ? 'split-view' : 'chat-only'}`}>
         <div className="chat-panel">
           <TerminalChat 
@@ -377,6 +410,7 @@ export default function App() {
             wsEndpoint={wsEndpoint}
             onScreenshotUpdate={handleScreenshotUpdate}
             onBrowserToggle={handleBrowserToggle}
+            onProjectCreated={handleProjectCreated}
           />
         </div>
         
