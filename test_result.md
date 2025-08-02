@@ -165,20 +165,29 @@ backend:
         agent: "testing"
         comment: "Chat history storage and retrieval working correctly with proper message structure"
 
-  - task: "WebSocket Support for Real-time Updates"
+  - task: "Z.ai API Integration"
     implemented: true
     working: true
     file: "/app/backend/server.py"
     stuck_count: 0
-    priority: "low"
+    priority: "medium"
     needs_retesting: false
     status_history:
       - working: true
         agent: "main"
-        comment: "Added WebSocket endpoint /api/ws/{session_id} for real-time communication"
-      - working: true
-        agent: "testing"
-        comment: "WebSocket infrastructure in place, ready for frontend integration"
+        comment: "Added Z.ai API key d19a7e6dfa8449deb00e6385ef83e961.8CUw7FYZuRLO1QHk as fallback to OpenAI. Currently using general_translation agent_id which responds in Chinese but provides translation services."
+
+  - task: "Conditional Browser View Logic"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented requires_browser_action() function to detect browser-related commands. Backend returns needs_browser flag to control frontend display."
 
 frontend:
   - task: "Terminal-style UI Design"
