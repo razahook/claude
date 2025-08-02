@@ -902,20 +902,16 @@ Respond with JSON in this format:
     "project_type": "fullstack"
 }}'''
                 elif needs_browser:
-                    if "google" in user_msg_lower or "go to" in user_msg_lower:
-                        url = "https://google.com"
-                        if "github" in user_msg_lower:
-                            url = "https://github.com"
-                        elif "example" in user_msg_lower:
-                            url = "https://example.com"
-                        elif "youtube" in user_msg_lower:
-                            url = "https://youtube.com"
-                            
+                    # Extract URL more accurately
+                    extracted_url = extract_url_from_message(request.message)
+                    user_msg_lower = request.message.lower()
+                    
+                    if extracted_url:
                         ai_output = f'''{{
-    "response": "I'll navigate to {url} for you. Please wait while I load the page...",
+    "response": "I'll navigate to {extracted_url} for you. Please wait while I load the page...",
     "action": {{
         "type": "goto",
-        "url": "{url}"
+        "url": "{extracted_url}"
     }},
     "needs_browser": true,
     "needs_project": false
@@ -925,6 +921,17 @@ Respond with JSON in this format:
     "response": "I'll take a screenshot of the current page for you.",
     "action": {{
         "type": "screenshot"
+    }},
+    "needs_browser": true,
+    "needs_project": false
+}}'''
+                    elif "scroll" in user_msg_lower:
+                        direction = "down" if "down" in user_msg_lower else "up" if "up" in user_msg_lower else "down"
+                        ai_output = f'''{{
+    "response": "I'll scroll {direction} the page for you.",
+    "action": {{
+        "type": "scroll",
+        "direction": "{direction}"
     }},
     "needs_browser": true,
     "needs_project": false
