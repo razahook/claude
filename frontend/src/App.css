@@ -29,22 +29,74 @@ body {
   min-height: 50px;
 }
 
-.app-title {
+.header-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #58a6ff;
+  gap: 1rem;
 }
 
-.title-icon {
+.project-count {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #7c3aed;
+  background: #1e1b2e;
+  padding: 0.3rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid #7c3aed33;
+}
+
+.project-icon {
   color: #ffa657;
 }
 
-.session-controls {
+/* Projects Bar */
+.projects-bar {
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+  padding: 0.5rem 1rem;
+  overflow-x: auto;
+}
+
+.projects-header {
+  font-size: 0.8rem;
+  color: #8b949e;
+  margin-bottom: 0.5rem;
+}
+
+.projects-list {
   display: flex;
-  gap: 0.5rem;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.project-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: #161b22;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  min-width: 150px;
+  font-size: 0.8rem;
+}
+
+.project-name {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.project-template {
+  color: #8b949e;
+  font-size: 0.7rem;
+}
+
+.project-status {
+  color: #238636;
+  font-size: 0.7rem;
 }
 
 .control-btn {
