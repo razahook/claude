@@ -451,7 +451,8 @@ Respond with JSON in this format:
             id=chat_obj.id,
             response=response_text,
             browser_action=action,
-            screenshot=screenshot_data
+            screenshot=screenshot_data,
+            needs_browser=needs_browser_response
         )
         
     except HTTPException:
