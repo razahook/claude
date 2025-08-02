@@ -28,6 +28,7 @@ db = client[os.environ['DB_NAME']]
 # API Keys
 BROWSERLESS_API_KEY = os.environ['BROWSERLESS_API_KEY']
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
+ZAI_API_KEY = os.environ['ZAI_API_KEY']
 
 # Initialize OpenAI client
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
