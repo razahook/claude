@@ -1023,18 +1023,11 @@ async def execute_browser_action(ws_endpoint: str, action: Dict[str, Any]) -> Op
             return None
 
 
-@api_router.get("/chat-history/{session_id}")
-async def get_chat_history(session_id: str):
-    """Get chat history for a session"""
-    try:
-        messages = await db.chat_messages.find(
-            {"session_id": session_id}
-        ).sort("timestamp", 1).to_list(100)
-        
-        return [ChatMessage(**msg) for msg in messages]
-    except Exception as e:
-        logger.error(f"Error fetching chat history: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
+@api_router.get("/vnc-info")
+async def get_vnc_info():
+    """Get VNC viewing information for real-time browser viewing"""
+    browser_agent = get_browser_use_agent(OPENAI_API_KEY)
+    return browser_agent.get_vnc_info()
 
 
 @api_router.get("/projects/{session_id}")
