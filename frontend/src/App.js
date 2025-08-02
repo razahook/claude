@@ -474,9 +474,15 @@ export default function App() {
   };
 
   const handleBrowserToggle = (needsBrowser, browserResult = null) => {
-    setShowBrowser(needsBrowser);
+    // Auto-show browser view when browser actions are needed
+    setShowBrowser(needsBrowser || browserResult?.success);
     if (browserResult) {
       setBrowserUseResult(browserResult);
+    }
+    
+    // Auto-create session if needed and not already created
+    if (needsBrowser && !wsEndpoint) {
+      createSession();
     }
   };
 
