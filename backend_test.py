@@ -3,6 +3,9 @@ import sys
 import json
 from datetime import datetime
 import uuid
+import asyncio
+import websockets
+import time
 
 class AIBrowserTerminalTester:
     def __init__(self, base_url="https://5b15c451-4da1-4e06-871f-f8a9795102c1.preview.emergentagent.com"):
@@ -11,7 +14,9 @@ class AIBrowserTerminalTester:
         self.tests_run = 0
         self.tests_passed = 0
         self.ws_endpoint = None
-        self.session_id = None
+        self.session_id = "test_session_001"  # Use specified test session ID
+        self.browser_use_tests_passed = 0
+        self.browser_use_tests_run = 0
 
     def run_test(self, name, method, endpoint, expected_status, data=None, timeout=30):
         """Run a single API test"""
