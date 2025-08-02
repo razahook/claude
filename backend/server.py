@@ -754,257 +754,47 @@ def requires_browser_action(message: str) -> bool:
 
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(request: ChatRequest):
-    """Chat with AI and execute browser actions or create projects"""
+    """Enhanced chat with AI featuring browser-use integration and conversation flow"""
     
     try:
         # Determine what type of action is needed
         needs_browser = requires_browser_action(request.message)
         needs_project = requires_project_creation(request.message)
         
-        # Create AI prompt based on requirements
-        if needs_project:
-            prompt = f"""
-You are an AI full-stack developer that can create complete applications. The user said: "{request.message}"
-
-Analyze the user's request and create a comprehensive project plan. Respond with JSON in this format:
-{{
-    "response": "Your conversational response explaining what you're creating",
-    "action": null,
-    "needs_browser": false,
-    "needs_project": true,
-    "project_description": "Detailed description of the project to create",
-    "project_type": "fullstack|frontend|backend|api"
-}}
-
-Be specific about what you're building and why you chose that approach.
-"""
-        elif needs_browser:
-            prompt = f"""
-You are an AI assistant that can control a web browser to help users. The user said: "{request.message}"
-
-Analyze the user's request and respond in a conversational way. If they want you to:
-1. Visit a website - create a "goto" action
-2. Extract information - create an "extract" action  
-3. Click something - create a "click" action
-4. Fill a form - create a "fill" action
-5. Take a screenshot - create a "screenshot" action
-6. Test a website - create appropriate testing actions
-
-Respond with JSON in this format:
-{{
-    "response": "Your conversational response to the user",
-    "action": {{
-        "type": "goto|extract|click|fill|screenshot",
-        "url": "URL if goto action",
-        "selector": "CSS selector if click/fill action",
-        "text": "Text to fill if fill action",
-        "extractors": ["selector1", "selector2"] // if extract action
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}
-
-If no browser action is needed, just include the response field without action.
-"""
-        else:
-            prompt = f"""
-You are a helpful AI assistant. The user said: "{request.message}"
-
-Respond conversationally and helpfully. This request does not require web browsing or project creation.
-
-Respond with JSON in this format:
-{{
-    "response": "Your helpful conversational response to the user",
-    "action": null,
-    "needs_browser": false,
-    "needs_project": false
-}}
-"""
-
-        # Try OpenAI first, then Z.ai, then fallback
-        ai_output = ""
-        
-        try:
-            gpt_response = await openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=700,
-                temperature=0.7
-            )
-            
-            ai_output = gpt_response.choices[0].message.content
-            if not ai_output:
-                raise Exception("No AI response received")
-                
-        except Exception as e:
-            logger.error(f"OpenAI API error: {str(e)}")
-            
-            # Try Z.ai API
-            if needs_project:
-                zai_prompt = f"I need help creating a web application: {request.message}. Please provide detailed project planning guidance."
-            elif needs_browser:
-                zai_prompt = f"I need help with web browsing: {request.message}. Please provide step-by-step instructions."
-            else:
-                zai_prompt = request.message
-                
-            zai_response = await call_zai_api(zai_prompt)
-            
-            if zai_response and not is_chinese_text(zai_response):
-                # Convert Z.ai response to our format
-                if needs_project:
-                    ai_output = f'''{{
-    "response": "{zai_response} Based on your request, I'll create a full-stack application for you.",
-    "action": null,
-    "needs_browser": false,
-    "needs_project": true,
-    "project_description": "{request.message}",
-    "project_type": "fullstack"
-}}'''
-                elif needs_browser:
-                    # Extract URL more accurately
-                    extracted_url = extract_url_from_message(request.message)
-                    user_msg_lower = request.message.lower()
-                    
-                    if extracted_url:
-                        ai_output = f'''{{
-    "response": "{zai_response} I'll navigate to {extracted_url} for you.",
-    "action": {{
-        "type": "goto",
-        "url": "{extracted_url}"
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                    elif "screenshot" in user_msg_lower:
-                        ai_output = f'''{{
-    "response": "{zai_response} I'll take a screenshot for you.",
-    "action": {{
-        "type": "screenshot"
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                    elif "scroll" in user_msg_lower:
-                        ai_output = f'''{{
-    "response": "{zai_response} I'll scroll down the page for you.",
-    "action": {{
-        "type": "scroll",
-        "direction": "down"
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                    else:
-                        ai_output = f'''{{
-    "response": "{zai_response}",
-    "action": null,
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                else:
-                    ai_output = f'''{{
-    "response": "{zai_response}",
-    "action": null,
-    "needs_browser": false,
-    "needs_project": false
-}}'''
-            else:
-                # Enhanced fallback response based on user input
-                user_msg_lower = request.message.lower()
-                
-                if needs_project:
-                    ai_output = f'''{{
-    "response": "I'll create a full-stack application based on your requirements. This will include a modern frontend, robust backend, and proper project structure.",
-    "action": null,
-    "needs_browser": false,
-    "needs_project": true,
-    "project_description": "{request.message}",
-    "project_type": "fullstack"
-}}'''
-                elif needs_browser:
-                    # Extract URL more accurately
-                    extracted_url = extract_url_from_message(request.message)
-                    user_msg_lower = request.message.lower()
-                    
-                    if extracted_url:
-                        ai_output = f'''{{
-    "response": "I'll navigate to {extracted_url} for you. Please wait while I load the page...",
-    "action": {{
-        "type": "goto",
-        "url": "{extracted_url}"
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                    elif "screenshot" in user_msg_lower or "take a" in user_msg_lower:
-                        ai_output = '''{{
-    "response": "I'll take a screenshot of the current page for you.",
-    "action": {{
-        "type": "screenshot"
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                    elif "scroll" in user_msg_lower:
-                        direction = "down" if "down" in user_msg_lower else "up" if "up" in user_msg_lower else "down"
-                        ai_output = f'''{{
-    "response": "I'll scroll {direction} the page for you.",
-    "action": {{
-        "type": "scroll",
-        "direction": "{direction}"
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                    elif "test" in user_msg_lower:
-                        ai_output = '''{{
-    "response": "I'll help you test the website. Let me take a screenshot first to see what we're working with.",
-    "action": {{
-        "type": "screenshot"
-    }},
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                    else:
-                        ai_output = f'''{{
-    "response": "I can help you browse the web! I can navigate to websites, take screenshots, click elements, and extract information. What would you like me to do?",
-    "action": null,
-    "needs_browser": true,
-    "needs_project": false
-}}'''
-                else:
-                    ai_output = f'''{{
-    "response": "I'm here to help! I can assist with web browsing tasks and create full-stack applications. What would you like to do?",
-    "action": null,
-    "needs_browser": false,
-    "needs_project": false
-}}'''
-
-        # Parse AI JSON output
-        try:
-            parsed = json.loads(ai_output)
-            response_text = parsed.get("response", "I'm processing your request...")
-            action = parsed.get("action")
-            needs_browser_response = parsed.get("needs_browser", needs_browser)
-            needs_project_response = parsed.get("needs_project", needs_project)
-            project_description = parsed.get("project_description", "")
-            project_type = parsed.get("project_type", "fullstack")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI JSON response: {ai_output}")
-            response_text = "I understand you want me to help. Could you be more specific?"
-            action = None
-            needs_browser_response = False
-            needs_project_response = False
-            project_description = ""
-            project_type = "fullstack"
-
-        # Execute project creation if needed
+        # Initialize variables
+        response_text = ""
+        action = None
         project_created = None
-        if needs_project_response and project_description:
+        browser_use_result = None
+        vnc_url = None
+        conversation_continues = True
+        
+        # Get browser-use agent
+        browser_agent = get_browser_use_agent(OPENAI_API_KEY)
+        
+        if needs_project:
+            # Handle project creation
             try:
-                project_info = await create_local_project(project_description, project_type)
+                # Use AI to understand project requirements
+                prompt = f"""
+You are an AI full-stack developer. The user said: "{request.message}"
+
+Analyze what they want to build and respond with project details.
+"""
                 
-                # Deploy to sandbox
+                try:
+                    gpt_response = await openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=300,
+                        temperature=0.7
+                    )
+                    ai_analysis = gpt_response.choices[0].message.content
+                except:
+                    ai_analysis = f"I'll create a full-stack application based on: {request.message}"
+                
+                # Create the project
+                project_info = await create_local_project(request.message, "fullstack")
                 sandbox_urls = await deploy_to_sandbox(project_info)
                 
                 project_created = {
@@ -1015,29 +805,110 @@ Respond with JSON in this format:
                     "sandbox_urls": sandbox_urls
                 }
                 
-                response_text += f"\n\n✅ Project created successfully!\n📁 Project ID: {project_info['project_id']}\n📋 Template: {project_info['template']}\n📂 Files: {len(project_info['files_created'])} files created"
+                response_text = f"🚀 **Project Created Successfully!**\n\n{ai_analysis}\n\n📁 **Project Details:**\n- ID: {project_info['project_id']}\n- Template: {project_info['template']}\n- Files: {len(project_info['files_created'])} files created\n\n**What would you like me to do next?** I can:\n- Test the application in the browser\n- Modify the code\n- Deploy to additional platforms\n- Create documentation"
                 
             except Exception as e:
-                logger.error(f"Error creating project: {str(e)}")
-                response_text += f"\n\n❌ Failed to create project: {str(e)}"
-
-        # Execute browser action if provided and we have a WebSocket endpoint
+                response_text = f"❌ **Project Creation Failed**: {str(e)}\n\nLet me help you with something else. What would you like to do?"
+                
+        elif needs_browser and request.use_browser_use:
+            # Use browser-use for real-time browser automation
+            try:
+                response_text = f"🌐 **Starting browser automation for your request...**\n\n**Task**: {request.message}\n\n**Status**: Launching browser and beginning task execution...\n\n**Real-time viewing**: You can watch the AI work in real-time!"
+                
+                # Execute browser task with browser-use
+                browser_use_result = await browser_agent.execute_task(request.message, request.session_id)
+                
+                if browser_use_result.get("success"):
+                    # Success response with extracted data
+                    result_text = browser_use_result.get("result", "Task completed successfully")
+                    extracted_data = browser_use_result.get("extracted_data")
+                    
+                    response_text = f"✅ **Browser Task Completed!**\n\n**What I did**: {request.message}\n\n**Result**: {result_text}\n\n"
+                    
+                    if extracted_data:
+                        response_text += f"📊 **Extracted Data**:\n```json\n{json.dumps(extracted_data, indent=2)}\n```\n\n"
+                    
+                    response_text += "**What's next?** I can:\n- Extract more specific data\n- Navigate to related pages\n- Perform additional actions\n- Save this data to a file"
+                    
+                    vnc_url = browser_use_result.get("vnc_url")
+                    
+                else:
+                    # Error handling with helpful suggestions
+                    error = browser_use_result.get("error", "Unknown error")
+                    response_text = f"⚠️ **Browser Task Encountered an Issue**\n\n**Error**: {error}\n\n**Let me try a different approach**. You can:\n- Rephrase your request more specifically\n- Ask me to try with a different strategy\n- Use the VNC viewer to see what happened"
+                    vnc_url = browser_use_result.get("vnc_url")
+                    
+            except Exception as e:
+                logger.error(f"Browser-use error: {str(e)}")
+                response_text = f"⚠️ **Browser automation encountered an issue**: {str(e)}\n\n**Fallback**: Let me try with the legacy browser system or help you with something else."
+                
+                # Fallback to legacy browserless system
+                if request.ws_endpoint:
+                    try:
+                        extracted_url = extract_url_from_message(request.message)
+                        if extracted_url:
+                            action = {"type": "goto", "url": extracted_url}
+                            screenshot_data = await execute_browser_action(request.ws_endpoint, action)
+                            response_text += f"\n\n✅ **Fallback successful**: Navigated to {extracted_url}"
+                    except Exception as fallback_error:
+                        response_text += f"\n\n❌ **Fallback also failed**: {str(fallback_error)}"
+                        
+        elif needs_browser:
+            # Legacy browserless system for basic navigation
+            extracted_url = extract_url_from_message(request.message)
+            user_msg_lower = request.message.lower()
+            
+            if extracted_url:
+                response_text = f"🌐 **Navigating to {extracted_url}**\n\nI'll take a screenshot once the page loads..."
+                action = {"type": "goto", "url": extracted_url}
+            elif "scroll" in user_msg_lower:
+                direction = "down" if "down" in user_msg_lower else "up" if "up" in user_msg_lower else "down"
+                response_text = f"📜 **Scrolling {direction}**\n\nLet me scroll the page for you..."
+                action = {"type": "scroll", "direction": direction}
+            elif "screenshot" in user_msg_lower:
+                response_text = "📸 **Taking screenshot**\n\nCapturing the current page..."
+                action = {"type": "screenshot"}
+            else:
+                response_text = "🌐 **Browser Ready**\n\nI can help you navigate websites, take screenshots, and extract information. What would you like me to do?"
+                
+        else:
+            # General conversation
+            try:
+                gpt_response = await openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": request.message}],
+                    max_tokens=400,
+                    temperature=0.7
+                )
+                
+                response_text = gpt_response.choices[0].message.content
+                response_text += "\n\n**I can also help you with**:\n- 🚀 Creating full-stack applications\n- 🌐 Browsing and scraping websites\n- 📊 Extracting data from web pages"
+                
+            except Exception as e:
+                logger.error(f"OpenAI API error: {str(e)}")
+                response_text = "I'm here to help! I can create full-stack applications, browse websites, and extract data. What would you like to do?"
+        
+        # Execute legacy browser action if needed
         screenshot_data = None
-        if action and request.ws_endpoint and needs_browser_response:
+        if action and request.ws_endpoint:
             try:
                 screenshot_data = await execute_browser_action(request.ws_endpoint, action)
+                if screenshot_data:
+                    response_text += "\n\n📸 **Screenshot captured** - check the browser view!"
             except Exception as e:
                 logger.error(f"Error executing browser action: {str(e)}")
-                response_text += f" (Note: Browser action failed: {str(e)})"
+                response_text += f"\n\n⚠️ **Browser action failed**: {str(e)}"
 
-        # Save chat to database
+        # Save enhanced chat to database
         chat_obj = ChatMessage(
             session_id=request.session_id,
             message=request.message,
             response=response_text,
             browser_action=action,
             screenshot=screenshot_data,
-            project_created=project_created
+            project_created=project_created,
+            browser_use_result=browser_use_result,
+            vnc_url=vnc_url
         )
         await db.chat_messages.insert_one(chat_obj.dict())
 
@@ -1050,8 +921,11 @@ Respond with JSON in this format:
                     "response": response_text,
                     "browser_action": action,
                     "screenshot": screenshot_data,
-                    "needs_browser": needs_browser_response,
-                    "project_created": project_created
+                    "needs_browser": needs_browser,
+                    "project_created": project_created,
+                    "browser_use_result": browser_use_result,
+                    "vnc_url": vnc_url,
+                    "conversation_continues": conversation_continues
                 }
             }),
             request.session_id
@@ -1062,14 +936,17 @@ Respond with JSON in this format:
             response=response_text,
             browser_action=action,
             screenshot=screenshot_data,
-            needs_browser=needs_browser_response,
-            project_created=project_created
+            needs_browser=needs_browser,
+            project_created=project_created,
+            browser_use_result=browser_use_result,
+            vnc_url=vnc_url,
+            conversation_continues=conversation_continues
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in chat: {str(e)}")
+        logger.error(f"Error in enhanced chat: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
