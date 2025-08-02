@@ -942,7 +942,17 @@ Analyze what they want to build and respond with project details.
                 
             except Exception as e:
                 logger.error(f"OpenAI API error: {str(e)}")
-                response_text = "I'm here to help! I can create full-stack applications, browse websites, and extract data. What would you like to do?"
+                # Use Z.ai API as fallback
+                try:
+                    zai_response = await call_zai_api(request.message)
+                    if zai_response and not is_chinese_text(zai_response):
+                        response_text = zai_response + "\n\n**I can also help you with**:\n- 🚀 Creating full-stack applications\n- 🌐 Browsing and scraping websites\n- 📊 Extracting data from web pages"
+                    else:
+                        # Enhanced static response for common questions
+                        response_text = generate_smart_fallback_response(request.message)
+                except Exception as zai_error:
+                    logger.error(f"Z.ai API also failed: {str(zai_error)}")
+                    response_text = generate_smart_fallback_response(request.message)
         
         # Execute legacy browser action if needed
         screenshot_data = None
