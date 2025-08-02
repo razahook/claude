@@ -276,9 +276,32 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
   );
 };
 
-// Enhanced VNC Browser View Component  
-const VNCBrowserView = ({ vnc_url, browser_use_result }) => {
-  const [showVNC, setShowVNC] = useState(false);
+// Enhanced VNC Browser View Component with Auto-embed
+const VNCBrowserView = ({ vnc_url, browser_use_result, wsEndpoint, autoShow = true }) => {
+  const [isEmbedded, setIsEmbedded] = useState(autoShow);
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
+
+  useEffect(() => {
+    // Auto-show when browser actions are happening
+    if (browser_use_result?.success || wsEndpoint) {
+      setIsEmbedded(true);
+    }
+  }, [browser_use_result, wsEndpoint]);
+
+  useEffect(() => {
+    // Check connection status periodically
+    const checkConnection = () => {
+      if (wsEndpoint) {
+        setConnectionStatus('connected');
+      } else {
+        setConnectionStatus('disconnected');
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 5000);
+    return () => clearInterval(interval);
+  }, [wsEndpoint]);
 
   return (
     <div className="browser-view">
@@ -289,53 +312,65 @@ const VNCBrowserView = ({ vnc_url, browser_use_result }) => {
           <div className="control-dot green"></div>
         </div>
         <div className="browser-title">
-          Real-Time Browser View {browser_use_result?.success ? '(Active)' : '(Standby)'}
+          🔴 Live Browser Automation 
+          <span className={`connection-status ${connectionStatus}`}>
+            {connectionStatus === 'connected' ? '● Live' : '○ Standby'}
+          </span>
         </div>
         <div className="vnc-controls">
           <button 
             className="vnc-toggle"
-            onClick={() => setShowVNC(!showVNC)}
+            onClick={() => setIsEmbedded(!isEmbedded)}
           >
-            {showVNC ? 'Hide VNC' : 'Show VNC'}
+            {isEmbedded ? 'Minimize' : 'Expand'}
           </button>
         </div>
       </div>
       
       <div className="browser-content">
-        {showVNC && vnc_url ? (
-          <div className="vnc-container">
-            <iframe 
-              src={vnc_url}
-              className="vnc-iframe"
-              title="Real-time Browser View"
-            />
-            <div className="vnc-info">
-              <p>🔴 Live View - Watch AI browse in real-time</p>
-              <p>Default VNC Password: youvncpassword</p>
-            </div>
-          </div>
-        ) : browser_use_result?.success ? (
-          <div className="browser-status active">
-            <div className="status-indicator">🟢</div>
-            <h3>Browser Task Completed</h3>
-            <p>{browser_use_result.task}</p>
-            {browser_use_result.extracted_data && (
-              <div className="extracted-data">
-                <h4>Extracted Data:</h4>
-                <pre>{JSON.stringify(browser_use_result.extracted_data, null, 2)}</pre>
+        {isEmbedded ? (
+          <div className="embedded-browser">
+            {vnc_url && vnc_url !== "http://localhost:6080/vnc.html" ? (
+              <iframe 
+                src={vnc_url}
+                className="browser-iframe"
+                title="Live Browser Automation"
+                allow="camera; microphone; display-capture"
+              />
+            ) : (
+              <div className="browser-stream-placeholder">
+                <div className="stream-icon">🌐</div>
+                <div className="stream-status">
+                  <h3>Real-Time Browser Automation</h3>
+                  <p>
+                    {connectionStatus === 'connected' 
+                      ? '✅ Browser session active - AI actions will appear here automatically'
+                      : '⏳ Initializing browser automation...'
+                    }
+                  </p>
+                  {browser_use_result?.success && (
+                    <div className="last-action">
+                      <p><strong>Last Action:</strong> {browser_use_result.task}</p>
+                      {browser_use_result.extracted_data && (
+                        <details className="extracted-preview">
+                          <summary>📊 Data Extracted</summary>
+                          <pre>{JSON.stringify(browser_use_result.extracted_data, null, 2).slice(0, 200)}...</pre>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
-            <button onClick={() => setShowVNC(true)} className="view-vnc-btn">
-              View Real-Time Browser
-            </button>
           </div>
         ) : (
-          <div className="browser-placeholder">
-            <div className="placeholder-icon">🌐</div>
-            <div className="placeholder-text">
-              Real-time browser automation ready
-              <br/>
-              Ask me to browse a website to see it in action!
+          <div className="browser-minimized">
+            <div className="minimized-status">
+              <span className="status-icon">🟢</span>
+              <span>Browser automation running in background</span>
+              <button onClick={() => setIsEmbedded(true)} className="expand-btn">
+                Expand View
+              </button>
             </div>
           </div>
         )}
