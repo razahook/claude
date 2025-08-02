@@ -718,6 +718,18 @@ def requires_project_creation(message: str) -> bool:
 
 def requires_browser_action(message: str) -> bool:
     """Determine if a message requires browser interaction"""
+    import re
+    
+    # Check for URLs in the message
+    url_pattern = r'https?://[^\s]+'
+    if re.search(url_pattern, message):
+        return True
+    
+    # Check for domain patterns
+    domain_pattern = r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}'
+    if re.search(domain_pattern, message):
+        return True
+    
     message_lower = message.lower()
     browser_keywords = [
         "go to", "visit", "navigate", "open", "browse",
@@ -726,7 +738,8 @@ def requires_browser_action(message: str) -> bool:
         "click", "button", "link", "element",
         "search", "find", "extract", "scrape", "get",
         "fill", "form", "input", "type",
-        "scroll", "wait", "load", "test"
+        "scroll", "wait", "load", "test",
+        "down", "up", "scroll down", "scroll up"
     ]
     
     return any(keyword in message_lower for keyword in browser_keywords)
