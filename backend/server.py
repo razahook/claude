@@ -57,11 +57,14 @@ class ChatMessage(BaseModel):
     browser_action: Optional[Dict[str, Any]] = None
     screenshot: Optional[str] = None
     project_created: Optional[Dict[str, Any]] = None
+    browser_use_result: Optional[Dict[str, Any]] = None
+    vnc_url: Optional[str] = None
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
     ws_endpoint: Optional[str] = None
+    use_browser_use: Optional[bool] = True  # Default to using browser-use
 
 class ChatResponse(BaseModel):
     id: str
@@ -70,6 +73,9 @@ class ChatResponse(BaseModel):
     screenshot: Optional[str] = None
     needs_browser: Optional[bool] = False
     project_created: Optional[Dict[str, Any]] = None
+    browser_use_result: Optional[Dict[str, Any]] = None
+    vnc_url: Optional[str] = None
+    conversation_continues: Optional[bool] = True
 
 class BrowserSessionResponse(BaseModel):
     wsEndpoint: str
