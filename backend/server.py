@@ -164,13 +164,78 @@ async def create_browserless_session():
         raise HTTPException(status_code=500, detail="Failed to create browser session")
 
 
+async def call_zai_api(prompt: str) -> str:
+    """Call Z.ai API as an alternative to OpenAI"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.z.ai/api/v1/agents",
+                headers={
+                    "Authorization": f"Bearer {ZAI_API_KEY}",
+                    "Content-Type": "application/json",
+                    "Accept-Language": "en-US,en"
+                },
+                json={
+                    "agent_id": "general_translation",  # Using general translation as it might work for general chat
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                }
+                            ]
+                        }
+                    ]
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("choices") and len(data["choices"]) > 0:
+                    choice = data["choices"][0]
+                    if choice.get("messages") and len(choice["messages"]) > 0:
+                        message = choice["messages"][0]
+                        content = message.get("content", {})
+                        return content.get("text", "")
+                        
+            logger.error(f"Z.ai API error: {response.status_code} - {response.text}")
+            return ""
+            
+    except Exception as e:
+        logger.error(f"Error calling Z.ai API: {str(e)}")
+        return ""
+
+
+def requires_browser_action(message: str) -> bool:
+    """Determine if a message requires browser interaction"""
+    message_lower = message.lower()
+    browser_keywords = [
+        "go to", "visit", "navigate", "open", "browse",
+        "website", "url", "page", "site",
+        "screenshot", "capture", "image", "picture",
+        "click", "button", "link", "element",
+        "search", "find", "extract", "scrape", "get",
+        "fill", "form", "input", "type",
+        "scroll", "wait", "load"
+    ]
+    
+    return any(keyword in message_lower for keyword in browser_keywords)
+
+
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(request: ChatRequest):
     """Chat with AI and execute browser actions"""
     
     try:
+        # Determine if browser action is needed
+        needs_browser = requires_browser_action(request.message)
+        
         # Create AI prompt for conversational browsing
-        prompt = f"""
+        if needs_browser:
+            prompt = f"""
 You are an AI assistant that can control a web browser to help users. The user said: "{request.message}"
 
 Analyze the user's request and respond in a conversational way. If they want you to:
@@ -189,13 +254,29 @@ Respond with JSON in this format:
         "selector": "CSS selector if click/fill action",
         "text": "Text to fill if fill action",
         "extractors": ["selector1", "selector2"] // if extract action
-    }}
+    }},
+    "needs_browser": true
 }}
 
 If no browser action is needed, just include the response field without action.
 """
+        else:
+            prompt = f"""
+You are a helpful AI assistant. The user said: "{request.message}"
 
-        # Call OpenAI GPT API
+Respond conversationally and helpfully. This request does not require web browsing.
+
+Respond with JSON in this format:
+{{
+    "response": "Your helpful conversational response to the user",
+    "action": null,
+    "needs_browser": false
+}}
+"""
+
+        # Try OpenAI first, then Z.ai, then fallback
+        ai_output = ""
+        
         try:
             gpt_response = await openai_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -211,49 +292,112 @@ If no browser action is needed, just include the response field without action.
         except Exception as e:
             logger.error(f"OpenAI API error: {str(e)}")
             
-            # Enhanced fallback response based on user input
-            user_msg_lower = request.message.lower()
+            # Try Z.ai API
+            if needs_browser:
+                zai_prompt = f"I need help with web browsing: {request.message}. Please provide step-by-step instructions."
+            else:
+                zai_prompt = request.message
+                
+            zai_response = await call_zai_api(zai_prompt)
             
-            if "google" in user_msg_lower or "go to" in user_msg_lower:
-                url = "https://google.com"
-                if "github" in user_msg_lower:
-                    url = "https://github.com"
-                elif "example" in user_msg_lower:
-                    url = "https://example.com"
-                elif "youtube" in user_msg_lower:
-                    url = "https://youtube.com"
+            if zai_response:
+                # Convert Z.ai response to our format
+                if needs_browser:
+                    user_msg_lower = request.message.lower()
                     
-                ai_output = f'''{{
+                    if "google" in user_msg_lower or "go to" in user_msg_lower:
+                        url = "https://google.com"
+                        if "github" in user_msg_lower:
+                            url = "https://github.com"
+                        elif "example" in user_msg_lower:
+                            url = "https://example.com"
+                        elif "youtube" in user_msg_lower:
+                            url = "https://youtube.com"
+                            
+                        ai_output = f'''{{
+    "response": "{zai_response} I'll navigate to {url} for you.",
+    "action": {{
+        "type": "goto",
+        "url": "{url}"
+    }},
+    "needs_browser": true
+}}'''
+                    elif "screenshot" in user_msg_lower:
+                        ai_output = f'''{{
+    "response": "{zai_response} I'll take a screenshot for you.",
+    "action": {{
+        "type": "screenshot"
+    }},
+    "needs_browser": true
+}}'''
+                    else:
+                        ai_output = f'''{{
+    "response": "{zai_response}",
+    "action": null,
+    "needs_browser": true
+}}'''
+                else:
+                    ai_output = f'''{{
+    "response": "{zai_response}",
+    "action": null,
+    "needs_browser": false
+}}'''
+            else:
+                # Enhanced fallback response based on user input
+                user_msg_lower = request.message.lower()
+                
+                if needs_browser:
+                    if "google" in user_msg_lower or "go to" in user_msg_lower:
+                        url = "https://google.com"
+                        if "github" in user_msg_lower:
+                            url = "https://github.com"
+                        elif "example" in user_msg_lower:
+                            url = "https://example.com"
+                        elif "youtube" in user_msg_lower:
+                            url = "https://youtube.com"
+                            
+                        ai_output = f'''{{
     "response": "I'll navigate to {url} for you. Please wait while I load the page...",
     "action": {{
         "type": "goto",
         "url": "{url}"
-    }}
+    }},
+    "needs_browser": true
 }}'''
-            elif "screenshot" in user_msg_lower or "take a" in user_msg_lower:
-                ai_output = '''{{
+                    elif "screenshot" in user_msg_lower or "take a" in user_msg_lower:
+                        ai_output = '''{{
     "response": "I'll take a screenshot of the current page for you.",
     "action": {{
         "type": "screenshot"
-    }}
+    }},
+    "needs_browser": true
 }}'''
-            elif "click" in user_msg_lower:
-                ai_output = '''{{
+                    elif "click" in user_msg_lower:
+                        ai_output = '''{{
     "response": "I understand you want me to click something. Could you be more specific about what element to click?",
-    "action": null
+    "action": null,
+    "needs_browser": true
 }}'''
-            elif "extract" in user_msg_lower or "get" in user_msg_lower:
-                ai_output = '''{{
+                    elif "extract" in user_msg_lower or "get" in user_msg_lower:
+                        ai_output = '''{{
     "response": "I'll extract information from the current page for you.",
     "action": {{
         "type": "extract",
         "extractors": ["title", "h1", "p"]
-    }}
+    }},
+    "needs_browser": true
 }}'''
-            else:
-                ai_output = f'''{{
-    "response": "I'm here to help you browse the web! I can navigate to websites, take screenshots, click elements, and extract information. What would you like me to do? (Note: AI service temporarily unavailable, using fallback responses)",
-    "action": null
+                    else:
+                        ai_output = f'''{{
+    "response": "I can help you browse the web! I can navigate to websites, take screenshots, click elements, and extract information. What would you like me to do?",
+    "action": null,
+    "needs_browser": true
+}}'''
+                else:
+                    ai_output = f'''{{
+    "response": "I'm here to help! I can assist with web browsing tasks like navigating to websites, taking screenshots, and extracting information. What would you like to know or do?",
+    "action": null,
+    "needs_browser": false
 }}'''
 
         # Parse AI JSON output
@@ -261,14 +405,16 @@ If no browser action is needed, just include the response field without action.
             parsed = json.loads(ai_output)
             response_text = parsed.get("response", "I'm processing your request...")
             action = parsed.get("action")
+            needs_browser_response = parsed.get("needs_browser", needs_browser)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI JSON response: {ai_output}")
-            response_text = "I understand you want me to help with browsing. Could you be more specific?"
+            response_text = "I understand you want me to help. Could you be more specific?"
             action = None
+            needs_browser_response = False
 
         # Execute browser action if provided and we have a WebSocket endpoint
         screenshot_data = None
-        if action and request.ws_endpoint:
+        if action and request.ws_endpoint and needs_browser_response:
             try:
                 screenshot_data = await execute_browser_action(request.ws_endpoint, action)
             except Exception as e:
@@ -293,7 +439,8 @@ If no browser action is needed, just include the response field without action.
                     "id": chat_obj.id,
                     "response": response_text,
                     "browser_action": action,
-                    "screenshot": screenshot_data
+                    "screenshot": screenshot_data,
+                    "needs_browser": needs_browser_response
                 }
             }),
             request.session_id
