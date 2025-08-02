@@ -569,44 +569,30 @@ def generate_smart_fallback_response(message: str) -> str:
     """Generate a smart fallback response based on the user's message"""
     import datetime
     
-    logger.error(f"Smart fallback called with message: '{message}'")
     message_lower = message.lower()
-    logger.error(f"Message lower: '{message_lower}'")
     
-    # Date/time questions
-    date_patterns = ["what day", "what date", "today", "current date", "day is it"]
-    logger.error(f"Checking date patterns: {date_patterns}")
-    
-    for pattern in date_patterns:
-        if pattern in message_lower:
-            logger.error(f"DATE PATTERN MATCHED: '{pattern}' found in '{message_lower}'")
-            current_date = datetime.datetime.now()
-            return f"Today is {current_date.strftime('%A, %B %d, %Y')}. The current time is {current_date.strftime('%I:%M %p')}.\n\nWhat can I help you with today?"
-    
-    logger.error("NO DATE PATTERNS MATCHED")
+    # Date/time questions (more specific matching)
+    if 'what day' in message_lower or 'current date' in message_lower or 'today' in message_lower:
+        current_date = datetime.datetime.now()
+        return f"Today is {current_date.strftime('%A, %B %d, %Y')}. The current time is {current_date.strftime('%I:%M %p')}.\n\nWhat can I help you with today?"
     
     # Common greetings
     if any(greeting in message_lower for greeting in ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"]):
-        logger.error("Greeting pattern matched!")
         return "Hello! I'm your AI assistant. I can help you create full-stack applications, browse websites, and extract data from web pages. What would you like to do today?"
     
     # Questions about capabilities
     if any(word in message_lower for word in ["what can you do", "help", "capabilities", "features"]):
-        logger.error("Capabilities pattern matched!")
         return "I'm here to help you with:\n\n🚀 **Full-Stack Development**\n- Create React + Express.js applications\n- Build Next.js + FastAPI projects\n- Generate complete project structures\n\n🌐 **Web Browsing & Automation**\n- Navigate websites and take screenshots\n- Extract data from web pages\n- Automate browser interactions\n\n📊 **Data Processing**\n- Scrape and analyze web content\n- Process and format data\n- Generate reports and insights\n\nWhat would you like to start with?"
     
     # Programming related
     if any(word in message_lower for word in ["code", "programming", "development", "app", "website"]):
-        logger.error("Programming pattern matched!")
         return "I'd love to help you with development! I can:\n\n• Create full-stack applications with modern frameworks\n• Set up project structures and boilerplate code\n• Help with both frontend and backend development\n• Deploy projects to sandbox environments\n\nWhat kind of application would you like to build?"
     
     # Web browsing related
     if any(word in message_lower for word in ["browse", "website", "scrape", "extract", "data"]):
-        logger.error("Web browsing pattern matched!")
         return "I can help you with web browsing and data extraction! I can:\n\n• Navigate to any website and take screenshots\n• Extract specific data from web pages\n• Automate browser interactions\n• Scrape content and analyze it\n\nWhich website would you like me to visit or what data do you need?"
     
     # Default response
-    logger.error("Using default fallback response")
     return "I'm here to help! I specialize in:\n\n🚀 Creating full-stack applications\n🌐 Browsing and scraping websites\n📊 Extracting data from web pages\n\nWhat would you like to do? Just describe what you need and I'll get started!"
 
 
