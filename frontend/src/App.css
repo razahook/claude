@@ -425,16 +425,17 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .app-body {
+  .app-body.split-view {
     flex-direction: column;
   }
   
-  .chat-panel, .browser-panel {
+  .app-body.split-view .chat-panel,
+  .app-body.split-view .browser-panel {
     width: 100%;
     height: 50%;
   }
   
-  .chat-panel {
+  .app-body.split-view .chat-panel {
     border-right: none;
     border-bottom: 1px solid #30363d;
   }
