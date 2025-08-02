@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 
 class AIBrowserTerminalTester:
-    def __init__(self, base_url="https://582c5acb-bc67-484f-92b8-1f3ede237f4f.preview.emergentagent.com"):
+    def __init__(self, base_url="https://5b15c451-4da1-4e06-871f-f8a9795102c1.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.tests_run = 0
