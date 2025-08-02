@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -14,6 +14,7 @@ import json
 from playwright.async_api import async_playwright
 import asyncio
 from openai import AsyncOpenAI
+import base64
 
 
 ROOT_DIR = Path(__file__).parent
@@ -39,6 +40,30 @@ api_router = APIRouter(prefix="/api")
 
 
 # Define Models
+class ChatMessage(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    session_id: str
+    message: str
+    response: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    browser_action: Optional[Dict[str, Any]] = None
+    screenshot: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+    ws_endpoint: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    id: str
+    response: str
+    browser_action: Optional[Dict[str, Any]] = None
+    screenshot: Optional[str] = None
+
+class BrowserSessionResponse(BaseModel):
+    wsEndpoint: str
+    sessionId: str
+
 class StatusCheck(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
@@ -47,22 +72,40 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
-class BrowserSessionResponse(BaseModel):
-    wsEndpoint: str
 
-class RunTaskRequest(BaseModel):
-    wsEndpoint: str
-    targetUrl: str
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+        self.session_connections: Dict[str, List[WebSocket]] = {}
 
-class RunTaskResponse(BaseModel):
-    extracted: Dict[str, Any]
-    aiOutput: str
+    async def connect(self, websocket: WebSocket, session_id: str):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        if session_id not in self.session_connections:
+            self.session_connections[session_id] = []
+        self.session_connections[session_id].append(websocket)
+
+    def disconnect(self, websocket: WebSocket, session_id: str):
+        self.active_connections.remove(websocket)
+        if session_id in self.session_connections:
+            self.session_connections[session_id].remove(websocket)
+
+    async def send_to_session(self, message: str, session_id: str):
+        if session_id in self.session_connections:
+            for connection in self.session_connections[session_id]:
+                try:
+                    await connection.send_text(message)
+                except:
+                    pass
+
+manager = ConnectionManager()
 
 
 # Existing routes
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "AI Terminal Assistant Ready"}
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
@@ -77,19 +120,23 @@ async def get_status_checks():
     return [StatusCheck(**status_check) for status_check in status_checks]
 
 
-# New agentic scraper routes
+# Enhanced browser session with VNC-like capability
 @api_router.post("/create-session", response_model=BrowserSessionResponse)
 async def create_browserless_session():
-    """Create a new Browserless session and return wsEndpoint"""
+    """Create a new Browserless session with VNC viewing capability"""
     try:
+        # Generate session ID
+        session_id = str(uuid.uuid4())
+        
         session_config = {
-            "ttl": 300000,  # 5 minutes
+            "ttl": 600000,  # 10 minutes
             "stealth": True,
-            "headless": True,
+            "headless": False,  # Changed to false for visual debugging
             "args": [
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
-                "--disable-background-timer-throttling"
+                "--disable-background-timer-throttling",
+                "--window-size=1280,720"
             ]
         }
         
@@ -107,8 +154,7 @@ async def create_browserless_session():
                 raise HTTPException(status_code=500, detail=f"Browserless API error: {response.status_code}")
             
             data = response.json()
-            # The response contains 'connect' field with the WebSocket endpoint
-            return BrowserSessionResponse(wsEndpoint=data["connect"])
+            return BrowserSessionResponse(wsEndpoint=data["connect"], sessionId=session_id)
             
     except HTTPException:
         raise
@@ -117,34 +163,44 @@ async def create_browserless_session():
         raise HTTPException(status_code=500, detail="Failed to create browser session")
 
 
-@api_router.post("/run-task", response_model=RunTaskResponse)
-async def run_agentic_task(request: RunTaskRequest):
-    """Run AI-controlled browsing and scraping task"""
-    
-    if not request.wsEndpoint or not request.targetUrl:
-        raise HTTPException(status_code=400, detail="Missing wsEndpoint or targetUrl")
+@api_router.post("/chat", response_model=ChatResponse)
+async def chat_with_ai(request: ChatRequest):
+    """Chat with AI and execute browser actions"""
     
     try:
-        # Create the AI prompt
+        # Create AI prompt for conversational browsing
         prompt = f"""
-You are an AI agent controlling a browser.
-Navigate to this URL: {request.targetUrl}
-Extract the page title and first paragraph text.
-Respond with JSON:
+You are an AI assistant that can control a web browser to help users. The user said: "{request.message}"
+
+Analyze the user's request and respond in a conversational way. If they want you to:
+1. Visit a website - create a "goto" action
+2. Extract information - create an "extract" action  
+3. Click something - create a "click" action
+4. Fill a form - create a "fill" action
+5. Take a screenshot - create a "screenshot" action
+
+Respond with JSON in this format:
 {{
-    "actions": [
-        {{"type": "goto", "url": "{request.targetUrl}"}},
-        {{"type": "extract", "selectors": ["title", "p"]}}
-    ]
+    "response": "Your conversational response to the user",
+    "action": {{
+        "type": "goto|extract|click|fill|screenshot",
+        "url": "URL if goto action",
+        "selector": "CSS selector if click/fill action",
+        "text": "Text to fill if fill action",
+        "extractors": ["selector1", "selector2"] // if extract action
+    }}
 }}
+
+If no browser action is needed, just include the response field without action.
 """
 
-        # Call OpenAI GPT API (with fallback for quota issues)
+        # Call OpenAI GPT API
         try:
             gpt_response = await openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=300
+                max_tokens=500,
+                temperature=0.7
             )
             
             ai_output = gpt_response.choices[0].message.content
@@ -153,89 +209,155 @@ Respond with JSON:
                 
         except Exception as e:
             logger.error(f"OpenAI API error: {str(e)}")
-            # Fallback to a hardcoded response when OpenAI API fails
+            # Fallback response
             ai_output = '''
 {
-    "actions": [
-        {"type": "goto", "url": "''' + request.targetUrl + '''"},
-        {"type": "extract", "selectors": ["title", "p"]}
-    ]
+    "response": "I'm ready to help you browse the web! What would you like me to do?",
+    "action": null
 }'''
-            logger.info("Using fallback AI response due to API quota/error")
 
         # Parse AI JSON output
         try:
             parsed = json.loads(ai_output)
-            actions = parsed.get("actions", [])
+            response_text = parsed.get("response", "I'm processing your request...")
+            action = parsed.get("action")
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI JSON response: {ai_output}")
-            raise HTTPException(status_code=500, detail="Failed to parse AI response")
+            response_text = "I understand you want me to help with browsing. Could you be more specific?"
+            action = None
 
-        # Execute actions using Playwright connected to Browserless
-        extracted = {}
-        
-        async with async_playwright() as p:
+        # Execute browser action if provided and we have a WebSocket endpoint
+        screenshot_data = None
+        if action and request.ws_endpoint:
             try:
-                # Connect to the Browserless session using the WebSocket endpoint
-                browser = await p.chromium.connect_over_cdp(request.wsEndpoint)
-                
-                # Get or create a page
-                pages = []
-                for context in browser.contexts:
-                    pages.extend(context.pages)
-                
-                if pages:
-                    page = pages[0]
-                else:
-                    # Create a new context and page if none exist
-                    context = await browser.new_context()
-                    page = await context.new_page()
-
-                # Execute the AI-generated actions
-                for action in actions:
-                    if action.get("type") == "goto":
-                        await page.goto(action.get("url"), wait_until="domcontentloaded", timeout=30000)
-                        await asyncio.sleep(3)  # Wait for page to stabilize
-                        
-                    elif action.get("type") == "extract":
-                        selectors = action.get("selectors", [])
-                        for selector in selectors:
-                            try:
-                                if selector == "title":
-                                    extracted[selector] = await page.title()
-                                elif selector == "p":
-                                    # Get first paragraph text
-                                    first_p = await page.query_selector("p")
-                                    if first_p:
-                                        text_content = await first_p.text_content()
-                                        extracted[selector] = text_content.strip() if text_content else ""
-                                    else:
-                                        extracted[selector] = ""
-                                else:
-                                    # Generic selector extraction
-                                    element = await page.query_selector(selector)
-                                    if element:
-                                        text_content = await element.text_content()
-                                        extracted[selector] = text_content.strip() if text_content else ""
-                                    else:
-                                        extracted[selector] = ""
-                            except Exception as e:
-                                logger.error(f"Error extracting {selector}: {str(e)}")
-                                extracted[selector] = f"Error: {str(e)}"
-
-                # Don't close the browser - let Browserless handle it
-                
+                screenshot_data = await execute_browser_action(request.ws_endpoint, action)
             except Exception as e:
-                logger.error(f"Playwright execution error: {str(e)}")
-                raise HTTPException(status_code=500, detail=f"Browser execution error: {str(e)}")
+                logger.error(f"Error executing browser action: {str(e)}")
+                response_text += f" (Note: Browser action failed: {str(e)})"
 
-        return RunTaskResponse(extracted=extracted, aiOutput=ai_output)
+        # Save chat to database
+        chat_obj = ChatMessage(
+            session_id=request.session_id,
+            message=request.message,
+            response=response_text,
+            browser_action=action,
+            screenshot=screenshot_data
+        )
+        await db.chat_messages.insert_one(chat_obj.dict())
+
+        # Send update to WebSocket clients
+        await manager.send_to_session(
+            json.dumps({
+                "type": "chat_response",
+                "data": {
+                    "id": chat_obj.id,
+                    "response": response_text,
+                    "browser_action": action,
+                    "screenshot": screenshot_data
+                }
+            }),
+            request.session_id
+        )
+
+        return ChatResponse(
+            id=chat_obj.id,
+            response=response_text,
+            browser_action=action,
+            screenshot=screenshot_data
+        )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error running AI task: {str(e)}")
+        logger.error(f"Error in chat: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def execute_browser_action(ws_endpoint: str, action: Dict[str, Any]) -> Optional[str]:
+    """Execute browser action and return screenshot as base64"""
+    
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.connect_over_cdp(ws_endpoint)
+            
+            # Get or create a page
+            pages = []
+            for context in browser.contexts:
+                pages.extend(context.pages)
+            
+            if pages:
+                page = pages[0]
+            else:
+                context = await browser.new_context()
+                page = await context.new_page()
+
+            # Execute the action
+            action_type = action.get("type")
+            
+            if action_type == "goto":
+                url = action.get("url")
+                if url:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    await asyncio.sleep(2)
+                    
+            elif action_type == "click":
+                selector = action.get("selector")
+                if selector:
+                    await page.click(selector, timeout=10000)
+                    await asyncio.sleep(1)
+                    
+            elif action_type == "fill":
+                selector = action.get("selector")
+                text = action.get("text")
+                if selector and text:
+                    await page.fill(selector, text)
+                    await asyncio.sleep(1)
+                    
+            elif action_type == "extract":
+                extractors = action.get("extractors", [])
+                extracted = {}
+                for selector in extractors:
+                    element = await page.query_selector(selector)
+                    if element:
+                        text_content = await element.text_content()
+                        extracted[selector] = text_content.strip() if text_content else ""
+                logger.info(f"Extracted data: {extracted}")
+
+            # Always take a screenshot after action
+            screenshot_bytes = await page.screenshot(type="png", full_page=False)
+            screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+            
+            return screenshot_b64
+            
+        except Exception as e:
+            logger.error(f"Browser action execution error: {str(e)}")
+            return None
+
+
+@api_router.get("/chat-history/{session_id}")
+async def get_chat_history(session_id: str):
+    """Get chat history for a session"""
+    try:
+        messages = await db.chat_messages.find(
+            {"session_id": session_id}
+        ).sort("timestamp", 1).to_list(100)
+        
+        return [ChatMessage(**msg) for msg in messages]
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
+
+
+@api_router.websocket("/ws/{session_id}")
+async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    await manager.connect(websocket, session_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Handle real-time communication if needed
+            await manager.send_to_session(f"Echo: {data}", session_id)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, session_id)
 
 
 # Include the router in the main app
