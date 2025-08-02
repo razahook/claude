@@ -255,6 +255,12 @@ body {
   margin-left: auto;
 }
 
+.browser-badge {
+  color: #ffa657;
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
 .loading-message {
   display: flex;
   align-items: center;
