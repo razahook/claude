@@ -166,13 +166,13 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
         <div className="chat-messages">
           {messages.length === 0 && (
             <div className="welcome-message">
-              <span className="prompt">$</span> Welcome to AI Full-Stack Developer with Real-Time Browser
+              <span className="prompt">$</span> Welcome to AI Full-Stack Developer with Auto-Browser
               <br/>
-              <span className="prompt">$</span> I can create complete applications and browse the web in real-time.
+              <span className="prompt">$</span> ✨ Browser automation starts automatically - no buttons needed!
               <br/>
               <span className="prompt">$</span> Try: "Create a todo app" or "Go to apex legends stats and extract data"
               <br/>
-              <span className="prompt">$</span> Watch me work live with VNC viewer!
+              <span className="prompt">$</span> 🔴 Watch me work live in the embedded browser view!
             </div>
           )}
           
