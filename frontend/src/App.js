@@ -567,11 +567,13 @@ export default function App() {
           />
         </div>
         
-        {showBrowser && (
+        {(showBrowser || wsEndpoint) && (
           <div className="browser-panel">
             <VNCBrowserView 
               vnc_url={vncUrl}
               browser_use_result={browserUseResult}
+              wsEndpoint={wsEndpoint}
+              autoShow={showBrowser}
             />
           </div>
         )}
