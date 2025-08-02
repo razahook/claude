@@ -557,7 +557,7 @@ export default function App() {
         </div>
       )}
 
-      <div className={`app-body ${showBrowser ? 'split-view' : 'chat-only'}`}>
+      <div className={`app-body ${showBrowser || wsEndpoint ? 'split-view' : 'chat-only'}`}>
         <div className="chat-panel">
           <TerminalChat 
             sessionId={sessionId}
