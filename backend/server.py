@@ -209,12 +209,51 @@ If no browser action is needed, just include the response field without action.
                 
         except Exception as e:
             logger.error(f"OpenAI API error: {str(e)}")
-            # Fallback response
-            ai_output = '''
-{
-    "response": "I'm ready to help you browse the web! What would you like me to do?",
+            
+            # Enhanced fallback response based on user input
+            user_msg_lower = request.message.lower()
+            
+            if "google" in user_msg_lower or "go to" in user_msg_lower:
+                url = "https://google.com"
+                if "github" in user_msg_lower:
+                    url = "https://github.com"
+                elif "example" in user_msg_lower:
+                    url = "https://example.com"
+                elif "youtube" in user_msg_lower:
+                    url = "https://youtube.com"
+                    
+                ai_output = f'''{{
+    "response": "I'll navigate to {url} for you. Please wait while I load the page...",
+    "action": {{
+        "type": "goto",
+        "url": "{url}"
+    }}
+}}'''
+            elif "screenshot" in user_msg_lower or "take a" in user_msg_lower:
+                ai_output = '''{{
+    "response": "I'll take a screenshot of the current page for you.",
+    "action": {{
+        "type": "screenshot"
+    }}
+}}'''
+            elif "click" in user_msg_lower:
+                ai_output = '''{{
+    "response": "I understand you want me to click something. Could you be more specific about what element to click?",
     "action": null
-}'''
+}}'''
+            elif "extract" in user_msg_lower or "get" in user_msg_lower:
+                ai_output = '''{{
+    "response": "I'll extract information from the current page for you.",
+    "action": {{
+        "type": "extract",
+        "extractors": ["title", "h1", "p"]
+    }}
+}}'''
+            else:
+                ai_output = f'''{{
+    "response": "I'm here to help you browse the web! I can navigate to websites, take screenshots, click elements, and extract information. What would you like me to do? (Note: AI service temporarily unavailable, using fallback responses)",
+    "action": null
+}}'''
 
         # Parse AI JSON output
         try:
