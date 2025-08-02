@@ -394,9 +394,31 @@ export default function App() {
   useEffect(() => {
     // Generate session ID on mount
     setSessionId(generateSessionId());
+    // Auto-start browser session for seamless experience
+    autoStartSession();
     // Load VNC info
     loadVNCInfo();
   }, []);
+
+  const autoStartSession = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API}/create-session`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setWsEndpoint(data.wsEndpoint);
+        console.log('Browser session auto-started:', data.sessionId);
+      }
+    } catch (e) {
+      console.log('Auto-start session failed, will start manually when needed:', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const generateSessionId = () => {
     return 'session_' + Math.random().toString(36).substr(2, 9);
