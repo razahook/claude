@@ -75,22 +75,27 @@ class BrowserUseAgent:
             import re
             url_pattern = r'https?://[^\s]+'
             urls = re.findall(url_pattern, task)
-            if not urls:
-                # Look for domain patterns
-                domain_pattern = r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}'
-                domains = re.findall(domain_pattern, task)
-                if domains:
-                    url = f"https://{domains[0]}"
-                    urls = [url]
             
-            # Check for common website mentions
             if not urls:
-                if "google" in task_lower:
-                    urls = ["https://google.com"]
-                elif "github" in task_lower:
-                    urls = ["https://github.com"]
-                elif "youtube" in task_lower:
-                    urls = ["https://youtube.com"]
+                # Look for domain patterns - be more careful with extraction
+                task_words = task.lower().split()
+                for word in task_words:
+                    if "google" in word:
+                        urls = ["https://google.com"]
+                        break
+                    elif "github" in word:
+                        urls = ["https://github.com"]
+                        break
+                    elif "youtube" in word:
+                        urls = ["https://youtube.com"]
+                        break
+                    elif "." in word and any(tld in word for tld in [".com", ".org", ".net", ".io", ".co"]):
+                        # Found a potential domain
+                        if not word.startswith("http"):
+                            urls = [f"https://{word}"]
+                        else:
+                            urls = [word]
+                        break
             
             # Navigate to URL
             if urls:
