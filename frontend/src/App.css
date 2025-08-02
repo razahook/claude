@@ -99,6 +99,24 @@ body {
   font-size: 0.7rem;
 }
 
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #58a6ff;
+}
+
+.title-icon {
+  color: #ffa657;
+}
+
+.session-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .control-btn {
   padding: 0.4rem 0.8rem;
   border: 1px solid #30363d;
