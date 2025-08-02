@@ -238,7 +238,19 @@ frontend:
         agent: "main"
         comment: "Implemented BrowserView component that displays base64 screenshots from AI actions"
 
-  - task: "Remove Demo Data and Branding"
+  - task: "Conditional Browser View Display"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Modified layout to show browser view only when needs_browser=true. Chat-only mode uses full width, browser mode uses 50/50 split."
+
+  - task: "Enhanced Chat Interface with Browser Indicators"
     implemented: true
     working: "NA"
     file: "/app/frontend/src/App.js"
@@ -248,7 +260,7 @@ frontend:
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Removed 'Agentic Scraper Demo' title, replaced with 'AI Browser Terminal', professional branding"
+        comment: "Added browser badge indicators (🌐) for messages that trigger browser actions. Updated welcome message to explain conditional browser view."
 
 metadata:
   created_by: "main_agent"
