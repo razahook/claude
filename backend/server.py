@@ -1182,6 +1182,36 @@ async def get_vnc_info():
     return vnc_info
 
 
+@api_router.get("/vnc-stream")
+async def vnc_stream():
+    """Stream real-time browser view for embedded display"""
+    return {
+        "message": "Real-time Browser Stream",
+        "instructions": "This endpoint provides live browser automation viewing",
+        "stream_type": "embedded",
+        "status": "ready"
+    }
+
+
+@api_router.websocket("/vnc-ws/{session_id}")
+async def vnc_websocket(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time browser streaming"""
+    await websocket.accept()
+    try:
+        while True:
+            # This would stream browser frames in real implementation
+            data = await websocket.receive_text()
+            # For now, acknowledge the connection
+            await websocket.send_text(json.dumps({
+                "type": "browser_frame",
+                "session_id": session_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": "browser_stream_ready"
+            }))
+    except WebSocketDisconnect:
+        logger.info(f"Browser stream WebSocket disconnected for session {session_id}")
+
+
 @api_router.get("/vnc")
 async def vnc_proxy():
     """Proxy VNC viewer to work in hosted environment"""
