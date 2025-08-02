@@ -331,6 +331,78 @@ body {
   margin-left: 0.5rem;
 }
 
+.project-badge {
+  color: #7c3aed;
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
+/* Project Info Display */
+.project-info {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.project-icon {
+  color: #ffa657;
+}
+
+.project-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.project-meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: #8b949e;
+  font-size: 0.75rem;
+}
+
+.project-meta span {
+  background: #0d1117;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #30363d;
+}
+
+.sandbox-urls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sandbox-link {
+  color: #7c3aed;
+  text-decoration: none;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: #1e1b2e;
+  border-radius: 4px;
+  border: 1px solid #7c3aed33;
+  transition: all 0.2s ease;
+}
+
+.sandbox-link:hover {
+  background: #2d2a3e;
+  border-color: #7c3aed;
+}
+
 .loading-message {
   display: flex;
   align-items: center;
