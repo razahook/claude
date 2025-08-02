@@ -829,7 +829,7 @@ Respond with JSON in this format:
                 
             zai_response = await call_zai_api(zai_prompt)
             
-            if zai_response:
+            if zai_response and not is_chinese_text(zai_response):
                 # Convert Z.ai response to our format
                 if needs_project:
                     ai_output = f'''{{
@@ -841,22 +841,16 @@ Respond with JSON in this format:
     "project_type": "fullstack"
 }}'''
                 elif needs_browser:
+                    # Extract URL more accurately
+                    extracted_url = extract_url_from_message(request.message)
                     user_msg_lower = request.message.lower()
                     
-                    if "google" in user_msg_lower or "go to" in user_msg_lower:
-                        url = "https://google.com"
-                        if "github" in user_msg_lower:
-                            url = "https://github.com"
-                        elif "example" in user_msg_lower:
-                            url = "https://example.com"
-                        elif "youtube" in user_msg_lower:
-                            url = "https://youtube.com"
-                            
+                    if extracted_url:
                         ai_output = f'''{{
-    "response": "{zai_response} I'll navigate to {url} for you.",
+    "response": "{zai_response} I'll navigate to {extracted_url} for you.",
     "action": {{
         "type": "goto",
-        "url": "{url}"
+        "url": "{extracted_url}"
     }},
     "needs_browser": true,
     "needs_project": false
@@ -866,6 +860,16 @@ Respond with JSON in this format:
     "response": "{zai_response} I'll take a screenshot for you.",
     "action": {{
         "type": "screenshot"
+    }},
+    "needs_browser": true,
+    "needs_project": false
+}}'''
+                    elif "scroll" in user_msg_lower:
+                        ai_output = f'''{{
+    "response": "{zai_response} I'll scroll down the page for you.",
+    "action": {{
+        "type": "scroll",
+        "direction": "down"
     }},
     "needs_browser": true,
     "needs_project": false
