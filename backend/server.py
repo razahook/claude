@@ -84,7 +84,7 @@ async def create_browserless_session():
     try:
         async with httpx.AsyncClient() as http_client:
             response = await http_client.post(
-                f"https://chrome.browserless.io/sessions?token={BROWSERLESS_API_KEY}",
+                f"https://production-sfo.browserless.io/sessions?token={BROWSERLESS_API_KEY}",
                 timeout=30.0
             )
             
