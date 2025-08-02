@@ -25,16 +25,10 @@ class BrowserUseAgent:
             # Try to import browser-use components with updated API
             try:
                 from browser_use import Agent
-                from browser_use.llm.openai_llm import ChatOpenAI
+                from langchain_openai import ChatOpenAI
             except ImportError:
-                try:
-                    # Try alternative import structure
-                    from browser_use.agent.llm.openai_llm import ChatOpenAI
-                    from browser_use.agent import Agent
-                except ImportError:
-                    # Final fallback
-                    logger.warning("Browser-use imports failed, using fallback")
-                    return await self._fallback_execution(task, session_id)
+                logger.warning("Browser-use imports failed, using fallback")
+                return await self._fallback_execution(task, session_id)
             
             # Initialize the LLM with proper OpenAI configuration
             llm = ChatOpenAI(
