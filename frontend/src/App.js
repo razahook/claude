@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 // Terminal Chat Interface Component
-const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
+const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserToggle }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,7 +36,8 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
           content: msg.message,
           timestamp: new Date(msg.timestamp),
           response: msg.response,
-          screenshot: msg.screenshot
+          screenshot: msg.screenshot,
+          needsBrowser: msg.browser_action !== null
         })));
       }
     } catch (error) {
@@ -77,6 +78,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
           if (lastMsg.type === 'user') {
             lastMsg.response = data.response;
             lastMsg.screenshot = data.screenshot;
+            lastMsg.needsBrowser = data.needs_browser || data.browser_action !== null;
           }
           return updated;
         });
@@ -84,6 +86,11 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
         // Update screenshot in browser view
         if (data.screenshot && onScreenshotUpdate) {
           onScreenshotUpdate(data.screenshot);
+        }
+
+        // Toggle browser view based on needs_browser
+        if (onBrowserToggle) {
+          onBrowserToggle(data.needs_browser || data.browser_action !== null);
         }
       } else {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -126,11 +133,13 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
         <div className="chat-messages">
           {messages.length === 0 && (
             <div className="welcome-message">
-              <span className="prompt">$</span> Welcome to AI Terminal Assistant
+              <span className="prompt">$</span> Welcome to AI Browser Terminal
               <br/>
               <span className="prompt">$</span> I can help you browse the web and extract information.
               <br/>
-              <span className="prompt">$</span> Try: "Go to google.com" or "Take a screenshot"
+              <span className="prompt">$</span> Try: "Go to google.com" or "What is artificial intelligence?"
+              <br/>
+              <span className="prompt">$</span> Browser view appears only when web browsing is needed.
             </div>
           )}
           
@@ -140,6 +149,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
                 <span className="prompt user-prompt">user@terminal:~$</span>
                 <span className="message-content">{msg.content}</span>
                 <span className="timestamp">{msg.timestamp.toLocaleTimeString()}</span>
+                {msg.needsBrowser && <span className="browser-badge">🌐</span>}
               </div>
               
               {msg.response && (
@@ -168,7 +178,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Enter your command..."
+            placeholder="Ask me anything or request web browsing..."
             disabled={loading}
             className="terminal-text-input"
           />
