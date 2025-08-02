@@ -361,6 +361,10 @@ async def execute_browser_action(ws_endpoint: str, action: Dict[str, Any]) -> Op
                         text_content = await element.text_content()
                         extracted[selector] = text_content.strip() if text_content else ""
                 logger.info(f"Extracted data: {extracted}")
+                
+            elif action_type == "screenshot":
+                # Just take a screenshot without any specific action
+                await asyncio.sleep(1)
 
             # Always take a screenshot after action
             screenshot_bytes = await page.screenshot(type="png", full_page=False)
