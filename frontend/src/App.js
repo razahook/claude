@@ -228,17 +228,9 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
   );
 };
 
-// Browser View Component
-const BrowserView = ({ wsEndpoint, screenshot }) => {
-  const [status, setStatus] = useState('disconnected');
-
-  useEffect(() => {
-    if (wsEndpoint) {
-      setStatus('connected');
-    } else {
-      setStatus('disconnected');
-    }
-  }, [wsEndpoint]);
+// Enhanced VNC Browser View Component  
+const VNCBrowserView = ({ vnc_url, browser_use_result }) => {
+  const [showVNC, setShowVNC] = useState(false);
 
   return (
     <div className="browser-view">
@@ -249,28 +241,53 @@ const BrowserView = ({ wsEndpoint, screenshot }) => {
           <div className="control-dot green"></div>
         </div>
         <div className="browser-title">
-          Browser View - {status === 'connected' ? 'Connected' : 'Disconnected'}
+          Real-Time Browser View {browser_use_result?.success ? '(Active)' : '(Standby)'}
         </div>
-        <div className={`status-indicator ${status}`}>
-          <div className="status-dot"></div>
+        <div className="vnc-controls">
+          <button 
+            className="vnc-toggle"
+            onClick={() => setShowVNC(!showVNC)}
+          >
+            {showVNC ? 'Hide VNC' : 'Show VNC'}
+          </button>
         </div>
       </div>
       
       <div className="browser-content">
-        {screenshot ? (
-          <img 
-            src={`data:image/png;base64,${screenshot}`} 
-            alt="Browser Screenshot"
-            className="browser-screenshot"
-          />
+        {showVNC && vnc_url ? (
+          <div className="vnc-container">
+            <iframe 
+              src={vnc_url}
+              className="vnc-iframe"
+              title="Real-time Browser View"
+            />
+            <div className="vnc-info">
+              <p>🔴 Live View - Watch AI browse in real-time</p>
+              <p>Default VNC Password: youvncpassword</p>
+            </div>
+          </div>
+        ) : browser_use_result?.success ? (
+          <div className="browser-status active">
+            <div className="status-indicator">🟢</div>
+            <h3>Browser Task Completed</h3>
+            <p>{browser_use_result.task}</p>
+            {browser_use_result.extracted_data && (
+              <div className="extracted-data">
+                <h4>Extracted Data:</h4>
+                <pre>{JSON.stringify(browser_use_result.extracted_data, null, 2)}</pre>
+              </div>
+            )}
+            <button onClick={() => setShowVNC(true)} className="view-vnc-btn">
+              View Real-Time Browser
+            </button>
+          </div>
         ) : (
           <div className="browser-placeholder">
-            <div className="placeholder-icon">🖥️</div>
+            <div className="placeholder-icon">🌐</div>
             <div className="placeholder-text">
-              {status === 'connected' 
-                ? 'Waiting for browser interaction...' 
-                : 'Create a browser session to see live view'
-              }
+              Real-time browser automation ready
+              <br/>
+              Ask me to browse a website to see it in action!
             </div>
           </div>
         )}
