@@ -974,9 +974,7 @@ Analyze what they want to build and respond with project details.
             except Exception as e:
                 logger.error(f"OpenAI API error: {str(e)}")
                 # Z.ai API temporarily disabled - using enhanced static responses
-                logger.error(f"Calling generate_smart_fallback_response with message: {request.message}")
                 response_text = generate_smart_fallback_response(request.message)
-                logger.error(f"Generated response: {response_text[:100]}...")
         
         # Execute legacy browser action if needed
         screenshot_data = None
