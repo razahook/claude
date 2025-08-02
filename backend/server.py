@@ -1011,18 +1011,95 @@ async def execute_browser_action(ws_endpoint: str, action: Dict[str, Any]) -> Op
             return None
 
 
-@api_router.get("/chat-history/{session_id}")
-async def get_chat_history(session_id: str):
-    """Get chat history for a session"""
+@api_router.get("/projects/{session_id}")
+async def get_projects(session_id: str):
+    """Get all projects for a session"""
     try:
+        # Get projects from chat history
         messages = await db.chat_messages.find(
-            {"session_id": session_id}
-        ).sort("timestamp", 1).to_list(100)
+            {
+                "session_id": session_id,
+                "project_created": {"$ne": None}
+            }
+        ).to_list(100)
         
-        return [ChatMessage(**msg) for msg in messages]
+        projects = []
+        for msg in messages:
+            if msg.get("project_created"):
+                projects.append({
+                    "message_id": msg["id"],
+                    "timestamp": msg["timestamp"],
+                    "description": msg["message"],
+                    "project_data": msg["project_created"]
+                })
+        
+        return {"projects": projects}
     except Exception as e:
-        logger.error(f"Error fetching chat history: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
+        logger.error(f"Error fetching projects: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch projects")
+
+
+@api_router.get("/project/{project_id}/files")
+async def get_project_files(project_id: str):
+    """Get file structure of a project"""
+    try:
+        project = await db.projects.find_one({"project_id": project_id})
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Read files from local path
+        files_content = {}
+        local_path = project["local_path"]
+        
+        if os.path.exists(local_path):
+            for file_path in project["files_created"]:
+                full_path = os.path.join(local_path, file_path)
+                if os.path.exists(full_path):
+                    async with aiofiles.open(full_path, 'r') as f:
+                        files_content[file_path] = await f.read()
+        
+        return {
+            "project_id": project_id,
+            "files": files_content,
+            "structure": project["files_created"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching project files: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch project files")
+
+
+@api_router.post("/project/{project_id}/deploy")
+async def deploy_project(project_id: str):
+    """Deploy project to available sandbox services"""
+    try:
+        project = await db.projects.find_one({"project_id": project_id})
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Deploy to sandbox
+        sandbox_urls = await deploy_to_sandbox({
+            "project_id": project_id,
+            "local_path": project["local_path"]
+        })
+        
+        # Update project with deployment info
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$set": {"sandbox_urls": sandbox_urls, "deployed_at": datetime.utcnow()}}
+        )
+        
+        return {
+            "project_id": project_id,
+            "sandbox_urls": sandbox_urls,
+            "status": "deployed"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deploying project: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to deploy project")
 
 
 @api_router.websocket("/ws/{session_id}")
