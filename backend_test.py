@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 class AgenticScraperAPITester:
-    def __init__(self, base_url="https://b18f6d36-d162-472e-8488-24248bb6fe54.preview.emergentagent.com"):
+    def __init__(self, base_url="https://582c5acb-bc67-484f-92b8-1f3ede237f4f.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.tests_run = 0
