@@ -42,23 +42,14 @@ class BrowserUseAgent:
                 temperature=0.7
             )
             
-            # Create the agent with proper browser configuration
+            # Create the agent with Browserless configuration
             agent = Agent(
                 task=task,
-                llm=llm,
+                llm=llm, 
                 use_vision=True,
                 save_conversation_path=f"/tmp/browser_use_{session_id}.json",
-                browser_config={
-                    "headless": False,  # Show browser for VNC viewing
-                    "args": [
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-web-security",
-                        "--disable-features=VizDisplayCompositor",
-                        "--window-size=1280,720",
-                        "--start-maximized"
-                    ]
-                }
+                # Configure to use Browserless.io instead of local browser
+                use_browser=False  # We'll use the Browserless WebSocket connection instead
             )
             
             # Store for potential cancellation
