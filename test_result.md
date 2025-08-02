@@ -270,10 +270,10 @@ metadata:
 
 test_plan:
   current_focus:
+    - "Conditional Browser View Display"
+    - "Enhanced Chat Interface with Browser Indicators"
     - "Terminal-style UI Design"
     - "Split Layout - Chat + Browser View"
-    - "Conversational Chat Interface"
-    - "Real Browser View with Screenshots"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -283,6 +283,8 @@ agent_communication:
     message: "Completed major backend overhaul with conversational AI, browser automation, and screenshot capture. Frontend completely redesigned as terminal interface. Backend tested successfully with fallback mechanisms for OpenAI quota issues. Ready for frontend testing."
   - agent: "testing"
     message: "Backend infrastructure solid. Root endpoints working, browser sessions creating properly, chat system functional with enhanced fallbacks. AI quota issue noted but properly handled. Frontend needs testing for UI/UX functionality."
+  - agent: "main"
+    message: "Added Z.ai API integration as additional fallback (responds in Chinese). Implemented conditional browser view - only shows when browser actions needed. Updated frontend to handle dynamic layout switching. Backend tested with conditional logic working correctly."
 
 user_problem_statement: "Test the updated AI Browser Terminal application backend with key features: API endpoints (GET /api/, POST /api/create-session, POST /api/chat, GET /api/chat-history/{session_id}), browser session creation, AI chat functionality, and database operations."
 
