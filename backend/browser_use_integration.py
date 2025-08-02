@@ -15,8 +15,13 @@ class BrowserUseAgent:
         self.openai_api_key = openai_api_key
         self.current_agent = None
         self.conversation_history = []
-        # Update VNC URL to work in hosted environment
-        self.vnc_url = f"https://{os.environ.get('EMERGENTAGENT_PREVIEW_URL', 'localhost')}/vnc"
+        # Update VNC URL to work in hosted environment  
+        backend_url = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')
+        if backend_url.endswith('/api'):
+            base_url = backend_url[:-4]  # Remove /api suffix
+        else:
+            base_url = backend_url
+        self.vnc_url = f"{base_url}/vnc-stream"
         
     async def execute_task(self, task: str, session_id: str) -> Dict[str, Any]:
         """Execute a browser task using browser-use agent"""
