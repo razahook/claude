@@ -19,6 +19,7 @@ import tempfile
 import shutil
 import aiofiles
 import subprocess
+from browser_use_integration import get_browser_use_agent
 
 
 ROOT_DIR = Path(__file__).parent
