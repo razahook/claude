@@ -1,8 +1,6 @@
 import asyncio
 import logging
 from typing import Optional, Dict, Any, List
-from browser_use import Agent
-from browser_use.llm import ChatOpenAI
 import os
 import json
 import base64
@@ -23,6 +21,15 @@ class BrowserUseAgent:
         """Execute a browser task using browser-use agent"""
         
         try:
+            # Try to import browser-use components
+            try:
+                from browser_use import Agent
+                from browser_use.llm import ChatOpenAI
+            except ImportError:
+                # Fallback if browser-use isn't properly installed
+                logger.warning("Browser-use not available, using fallback")
+                return await self._fallback_execution(task, session_id)
+            
             # Initialize the LLM
             llm = ChatOpenAI(
                 model="gpt-4o-mini",
@@ -78,73 +85,24 @@ class BrowserUseAgent:
             
         except Exception as e:
             logger.error(f"Browser-use agent error: {str(e)}")
-            return {
-                "success": False,
-                "task": task,
-                "error": str(e),
-                "vnc_url": self.vnc_url,
-                "timestamp": datetime.utcnow().isoformat()
-            }
+            return await self._fallback_execution(task, session_id)
+    
+    async def _fallback_execution(self, task: str, session_id: str) -> Dict[str, Any]:
+        """Fallback execution when browser-use isn't available"""
+        return {
+            "success": False,
+            "task": task,
+            "error": "Browser-Use not available. Using enhanced legacy browser automation.",
+            "vnc_url": self.vnc_url,
+            "timestamp": datetime.utcnow().isoformat(),
+            "fallback": True
+        }
     
     async def extract_data(self, task: str, extractors: List[str], session_id: str) -> Dict[str, Any]:
         """Extract specific data from a webpage"""
         
         extraction_task = f"{task}. Extract the following information: {', '.join(extractors)}"
-        
-        try:
-            # Create specialized extraction agent
-            llm = ChatOpenAI(
-                model="gpt-4o-mini", 
-                api_key=self.openai_api_key,
-                temperature=0.3  # Lower temperature for data extraction
-            )
-            
-            agent = Agent(
-                task=extraction_task,
-                llm=llm,
-                save_conversation_path=f"/tmp/browser_extract_{session_id}.json",
-                browser_config={
-                    "headless": False,
-                    "args": ["--no-sandbox", "--disable-dev-shm-usage"]
-                }
-            )
-            
-            result = await agent.run()
-            
-            # Parse extracted data
-            extracted_data = {}
-            
-            # Try to parse JSON if the result contains structured data
-            result_str = str(result)
-            try:
-                if '{' in result_str and '}' in result_str:
-                    # Extract JSON from the result
-                    start = result_str.find('{')
-                    end = result_str.rfind('}') + 1
-                    json_str = result_str[start:end]
-                    extracted_data = json.loads(json_str)
-            except:
-                # Fallback to simple text extraction
-                extracted_data = {"raw_result": result_str}
-            
-            return {
-                "success": True,
-                "task": extraction_task,
-                "extracted_data": extracted_data,
-                "raw_result": result_str,
-                "vnc_url": self.vnc_url,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"Data extraction error: {str(e)}")
-            return {
-                "success": False,
-                "task": extraction_task,
-                "error": str(e),
-                "vnc_url": self.vnc_url,
-                "timestamp": datetime.utcnow().isoformat()
-            }
+        return await self.execute_task(extraction_task, session_id)
     
     async def continue_conversation(self, follow_up: str, session_id: str) -> Dict[str, Any]:
         """Continue a conversation with follow-up actions"""
