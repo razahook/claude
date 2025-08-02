@@ -1,32 +1,234 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Custom Browser UI Component
-const BrowserUI = ({ wsUrl }) => {
+// Terminal Chat Interface Component
+const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate }) => {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    // Load chat history
+    if (sessionId) {
+      loadChatHistory();
+    }
+  }, [sessionId]);
+
+  const loadChatHistory = async () => {
+    try {
+      const response = await fetch(`${API}/chat-history/${sessionId}`);
+      if (response.ok) {
+        const history = await response.json();
+        setMessages(history.map(msg => ({
+          type: 'user',
+          content: msg.message,
+          timestamp: new Date(msg.timestamp),
+          response: msg.response,
+          screenshot: msg.screenshot
+        })));
+      }
+    } catch (error) {
+      console.error("Error loading chat history:", error);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+
+    const userMessage = {
+      type: 'user',
+      content: input.trim(),
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setLoading(true);
+    setInput("");
+
+    try {
+      const response = await fetch(`${API}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: userMessage.content,
+          ws_endpoint: wsEndpoint
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        setMessages(prev => {
+          const updated = [...prev];
+          const lastMsg = updated[updated.length - 1];
+          if (lastMsg.type === 'user') {
+            lastMsg.response = data.response;
+            lastMsg.screenshot = data.screenshot;
+          }
+          return updated;
+        });
+
+        // Update screenshot in browser view
+        if (data.screenshot && onScreenshotUpdate) {
+          onScreenshotUpdate(data.screenshot);
+        }
+      } else {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg.type === 'user') {
+          lastMsg.response = "Error: Failed to send message. Please try again.";
+        }
+        return updated;
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
   return (
-    <div className="browser-container">
+    <div className="terminal-chat">
+      <div className="terminal-header">
+        <div className="terminal-title">
+          <span className="terminal-icon">$</span>
+          AI Terminal Assistant
+        </div>
+        <div className="session-info">
+          Session: {sessionId?.substring(0, 8) || 'Not Connected'}
+        </div>
+      </div>
+      
+      <div className="terminal-body">
+        <div className="chat-messages">
+          {messages.length === 0 && (
+            <div className="welcome-message">
+              <span className="prompt">$</span> Welcome to AI Terminal Assistant
+              <br/>
+              <span className="prompt">$</span> I can help you browse the web and extract information.
+              <br/>
+              <span className="prompt">$</span> Try: "Go to google.com" or "Take a screenshot"
+            </div>
+          )}
+          
+          {messages.map((msg, index) => (
+            <div key={index} className="message-group">
+              <div className="user-message">
+                <span className="prompt user-prompt">user@terminal:~$</span>
+                <span className="message-content">{msg.content}</span>
+                <span className="timestamp">{msg.timestamp.toLocaleTimeString()}</span>
+              </div>
+              
+              {msg.response && (
+                <div className="ai-response">
+                  <span className="prompt ai-prompt">ai@assistant:~$</span>
+                  <span className="message-content">{msg.response}</span>
+                </div>
+              )}
+            </div>
+          ))}
+          
+          {loading && (
+            <div className="loading-message">
+              <span className="prompt ai-prompt">ai@assistant:~$</span>
+              <span className="loading-dots">Processing your request...</span>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+        
+        <div className="terminal-input">
+          <span className="prompt input-prompt">user@terminal:~$</span>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Enter your command..."
+            disabled={loading}
+            className="terminal-text-input"
+          />
+          <button 
+            onClick={sendMessage} 
+            disabled={loading || !input.trim()}
+            className="send-button"
+          >
+            ▶
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Browser View Component
+const BrowserView = ({ wsEndpoint, screenshot }) => {
+  const [status, setStatus] = useState('disconnected');
+
+  useEffect(() => {
+    if (wsEndpoint) {
+      setStatus('connected');
+    } else {
+      setStatus('disconnected');
+    }
+  }, [wsEndpoint]);
+
+  return (
+    <div className="browser-view">
       <div className="browser-header">
         <div className="browser-controls">
           <div className="control-dot red"></div>
           <div className="control-dot yellow"></div>
           <div className="control-dot green"></div>
         </div>
-        <div className="browser-title">Live Browser Session</div>
+        <div className="browser-title">
+          Browser View - {status === 'connected' ? 'Connected' : 'Disconnected'}
+        </div>
+        <div className={`status-indicator ${status}`}>
+          <div className="status-dot"></div>
+        </div>
       </div>
+      
       <div className="browser-content">
-        {wsUrl ? (
-          <div className="browser-status">
-            <div className="status-indicator active"></div>
-            <p>Browser session active</p>
-            <p className="ws-url">WebSocket: {wsUrl.substring(0, 50)}...</p>
-          </div>
+        {screenshot ? (
+          <img 
+            src={`data:image/png;base64,${screenshot}`} 
+            alt="Browser Screenshot"
+            className="browser-screenshot"
+          />
         ) : (
-          <div className="browser-status">
-            <div className="status-indicator inactive"></div>
-            <p>No active session</p>
+          <div className="browser-placeholder">
+            <div className="placeholder-icon">🖥️</div>
+            <div className="placeholder-text">
+              {status === 'connected' 
+                ? 'Waiting for browser interaction...' 
+                : 'Create a browser session to see live view'
+              }
+            </div>
           </div>
         )}
       </div>
@@ -34,23 +236,31 @@ const BrowserUI = ({ wsUrl }) => {
   );
 };
 
+// Main App Component
 export default function App() {
+  const [sessionId, setSessionId] = useState("");
   const [wsEndpoint, setWsEndpoint] = useState("");
-  const [url, setUrl] = useState("");
-  const [extracted, setExtracted] = useState(null);
+  const [screenshot, setScreenshot] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  async function createSession() {
+  useEffect(() => {
+    // Generate session ID on mount
+    setSessionId(generateSessionId());
+  }, []);
+
+  const generateSessionId = () => {
+    return 'session_' + Math.random().toString(36).substr(2, 9);
+  };
+
+  const createSession = async () => {
     setLoading(true);
     setError(null);
     
     try {
       const response = await fetch(`${API}/create-session`, { 
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
       });
       
       if (!response.ok) {
@@ -65,143 +275,66 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function runTask() {
-    if (!url.trim()) {
-      setError("Please enter a URL to scrape");
-      return;
-    }
+  const endSession = () => {
+    setWsEndpoint("");
+    setScreenshot(null);
+    setSessionId(generateSessionId());
+  };
 
-    setLoading(true);
-    setError(null);
-    setExtracted(null);
-
-    try {
-      const response = await fetch(`${API}/run-task`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json" 
-        },
-        body: JSON.stringify({ 
-          wsEndpoint: wsEndpoint, 
-          targetUrl: url 
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setExtracted(data.extracted);
-    } catch (e) {
-      console.error("Error running task:", e);
-      setError("Failed to run scraping task. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const handleScreenshotUpdate = (newScreenshot) => {
+    setScreenshot(newScreenshot);
+  };
 
   return (
     <div className="app">
-      <div className="container">
-        <h1 className="title">🤖 Agentic Scraper Demo</h1>
-        <p className="subtitle">AI-powered browser automation with live session view</p>
-
-        {/* Session Management */}
-        <div className="section">
-          <h2>Browser Session</h2>
+      <div className="app-header">
+        <div className="app-title">
+          <span className="title-icon">⚡</span>
+          AI Browser Terminal
+        </div>
+        <div className="session-controls">
           {!wsEndpoint ? (
             <button 
-              className="btn btn-primary" 
+              className="control-btn start-session" 
               onClick={createSession}
               disabled={loading}
             >
-              {loading ? "Creating Session..." : "🚀 Start Browser Session"}
+              {loading ? "Starting..." : "Start Session"}
             </button>
           ) : (
-            <div className="session-info">
-              <span className="status-badge active">Session Active</span>
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => {
-                  setWsEndpoint("");
-                  setExtracted(null);
-                  setUrl("");
-                }}
-              >
-                End Session
-              </button>
-            </div>
+            <button 
+              className="control-btn end-session" 
+              onClick={endSession}
+            >
+              End Session
+            </button>
           )}
         </div>
+      </div>
 
-        {/* Live Browser UI */}
-        {wsEndpoint && (
-          <div className="section">
-            <h2>Live Browser View</h2>
-            <BrowserUI wsUrl={wsEndpoint} />
-          </div>
-        )}
+      {error && (
+        <div className="error-banner">
+          ⚠️ {error}
+          <button className="error-close" onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
-        {/* Task Input */}
-        {wsEndpoint && (
-          <div className="section">
-            <h2>Scraping Task</h2>
-            <div className="input-group">
-              <input
-                type="text"
-                placeholder="Enter URL to scrape (e.g., https://example.com)"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="url-input"
-                disabled={loading}
-              />
-              <button 
-                className="btn btn-primary" 
-                onClick={runTask}
-                disabled={loading || !url.trim()}
-              >
-                {loading ? "Running..." : "🔍 Run AI Scraping"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Error Display */}
-        {error && (
-          <div className="section">
-            <div className="error-box">
-              ⚠️ {error}
-            </div>
-          </div>
-        )}
-
-        {/* Results */}
-        {extracted && (
-          <div className="section">
-            <h2>📊 Extracted Content</h2>
-            <div className="results-container">
-              <div className="result-item">
-                <h3>Page Title</h3>
-                <p className="extracted-content">{extracted.title || "N/A"}</p>
-              </div>
-              <div className="result-item">
-                <h3>First Paragraph</h3>
-                <p className="extracted-content">{extracted.p || "N/A"}</p>
-              </div>
-              <details className="raw-data">
-                <summary>Raw Data</summary>
-                <pre>{JSON.stringify(extracted, null, 2)}</pre>
-              </details>
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="footer">
-          <p>Powered by Browserless, OpenAI GPT-4o-mini, and Playwright</p>
+      <div className="app-body">
+        <div className="chat-panel">
+          <TerminalChat 
+            sessionId={sessionId}
+            wsEndpoint={wsEndpoint}
+            onScreenshotUpdate={handleScreenshotUpdate}
+          />
+        </div>
+        
+        <div className="browser-panel">
+          <BrowserView 
+            wsEndpoint={wsEndpoint}
+            screenshot={screenshot}
+          />
         </div>
       </div>
     </div>
