@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 // Terminal Chat Interface Component
-const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserToggle }) => {
+const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserToggle, onProjectCreated }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,7 +37,8 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
           timestamp: new Date(msg.timestamp),
           response: msg.response,
           screenshot: msg.screenshot,
-          needsBrowser: msg.browser_action !== null
+          needsBrowser: msg.browser_action !== null,
+          projectCreated: msg.project_created
         })));
       }
     } catch (error) {
@@ -79,6 +80,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
             lastMsg.response = data.response;
             lastMsg.screenshot = data.screenshot;
             lastMsg.needsBrowser = data.needs_browser || data.browser_action !== null;
+            lastMsg.projectCreated = data.project_created;
           }
           return updated;
         });
@@ -91,6 +93,11 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
         // Toggle browser view based on needs_browser
         if (onBrowserToggle) {
           onBrowserToggle(data.needs_browser || data.browser_action !== null);
+        }
+
+        // Notify parent about project creation
+        if (data.project_created && onProjectCreated) {
+          onProjectCreated(data.project_created);
         }
       } else {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -122,7 +129,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
       <div className="terminal-header">
         <div className="terminal-title">
           <span className="terminal-icon">$</span>
-          AI Terminal Assistant
+          AI Full-Stack Developer
         </div>
         <div className="session-info">
           Session: {sessionId?.substring(0, 8) || 'Not Connected'}
@@ -133,13 +140,13 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
         <div className="chat-messages">
           {messages.length === 0 && (
             <div className="welcome-message">
-              <span className="prompt">$</span> Welcome to AI Browser Terminal
+              <span className="prompt">$</span> Welcome to AI Full-Stack Developer Terminal
               <br/>
-              <span className="prompt">$</span> I can help you browse the web and extract information.
+              <span className="prompt">$</span> I can create complete applications and browse the web.
               <br/>
-              <span className="prompt">$</span> Try: "Go to google.com" or "What is artificial intelligence?"
+              <span className="prompt">$</span> Try: "Create a todo app" or "Go to google.com"
               <br/>
-              <span className="prompt">$</span> Browser view appears only when web browsing is needed.
+              <span className="prompt">$</span> Browser view appears when web browsing is needed.
             </div>
           )}
           
@@ -150,12 +157,38 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
                 <span className="message-content">{msg.content}</span>
                 <span className="timestamp">{msg.timestamp.toLocaleTimeString()}</span>
                 {msg.needsBrowser && <span className="browser-badge">🌐</span>}
+                {msg.projectCreated && <span className="project-badge">🚀</span>}
               </div>
               
               {msg.response && (
                 <div className="ai-response">
-                  <span className="prompt ai-prompt">ai@assistant:~$</span>
+                  <span className="prompt ai-prompt">ai@developer:~$</span>
                   <span className="message-content">{msg.response}</span>
+                </div>
+              )}
+
+              {msg.projectCreated && (
+                <div className="project-info">
+                  <div className="project-header">
+                    <span className="project-icon">📁</span>
+                    <span className="project-name">{msg.projectCreated.project_name}</span>
+                  </div>
+                  <div className="project-details">
+                    <div className="project-meta">
+                      <span>ID: {msg.projectCreated.project_id}</span>
+                      <span>Template: {msg.projectCreated.template}</span>
+                      <span>Files: {msg.projectCreated.files_created?.length || 0}</span>
+                    </div>
+                    {msg.projectCreated.sandbox_urls && (
+                      <div className="sandbox-urls">
+                        {Object.entries(msg.projectCreated.sandbox_urls).map(([key, url]) => (
+                          <a key={key} href={url} target="_blank" rel="noopener noreferrer" className="sandbox-link">
+                            {key}: {url}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -163,7 +196,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
           
           {loading && (
             <div className="loading-message">
-              <span className="prompt ai-prompt">ai@assistant:~$</span>
+              <span className="prompt ai-prompt">ai@developer:~$</span>
               <span className="loading-dots">Processing your request...</span>
             </div>
           )}
@@ -178,7 +211,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask me anything or request web browsing..."
+            placeholder="Ask me to create apps or browse the web..."
             disabled={loading}
             className="terminal-text-input"
           />
