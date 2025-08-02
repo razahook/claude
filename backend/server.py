@@ -638,14 +638,31 @@ def requires_browser_action(message: str) -> bool:
 
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(request: ChatRequest):
-    """Chat with AI and execute browser actions"""
+    """Chat with AI and execute browser actions or create projects"""
     
     try:
-        # Determine if browser action is needed
+        # Determine what type of action is needed
         needs_browser = requires_browser_action(request.message)
+        needs_project = requires_project_creation(request.message)
         
-        # Create AI prompt for conversational browsing
-        if needs_browser:
+        # Create AI prompt based on requirements
+        if needs_project:
+            prompt = f"""
+You are an AI full-stack developer that can create complete applications. The user said: "{request.message}"
+
+Analyze the user's request and create a comprehensive project plan. Respond with JSON in this format:
+{{
+    "response": "Your conversational response explaining what you're creating",
+    "action": null,
+    "needs_browser": false,
+    "needs_project": true,
+    "project_description": "Detailed description of the project to create",
+    "project_type": "fullstack|frontend|backend|api"
+}}
+
+Be specific about what you're building and why you chose that approach.
+"""
+        elif needs_browser:
             prompt = f"""
 You are an AI assistant that can control a web browser to help users. The user said: "{request.message}"
 
@@ -655,6 +672,7 @@ Analyze the user's request and respond in a conversational way. If they want you
 3. Click something - create a "click" action
 4. Fill a form - create a "fill" action
 5. Take a screenshot - create a "screenshot" action
+6. Test a website - create appropriate testing actions
 
 Respond with JSON in this format:
 {{
@@ -666,7 +684,8 @@ Respond with JSON in this format:
         "text": "Text to fill if fill action",
         "extractors": ["selector1", "selector2"] // if extract action
     }},
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}
 
 If no browser action is needed, just include the response field without action.
@@ -675,13 +694,14 @@ If no browser action is needed, just include the response field without action.
             prompt = f"""
 You are a helpful AI assistant. The user said: "{request.message}"
 
-Respond conversationally and helpfully. This request does not require web browsing.
+Respond conversationally and helpfully. This request does not require web browsing or project creation.
 
 Respond with JSON in this format:
 {{
     "response": "Your helpful conversational response to the user",
     "action": null,
-    "needs_browser": false
+    "needs_browser": false,
+    "needs_project": false
 }}
 """
 
@@ -692,7 +712,7 @@ Respond with JSON in this format:
             gpt_response = await openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+                max_tokens=700,
                 temperature=0.7
             )
             
@@ -704,7 +724,9 @@ Respond with JSON in this format:
             logger.error(f"OpenAI API error: {str(e)}")
             
             # Try Z.ai API
-            if needs_browser:
+            if needs_project:
+                zai_prompt = f"I need help creating a web application: {request.message}. Please provide detailed project planning guidance."
+            elif needs_browser:
                 zai_prompt = f"I need help with web browsing: {request.message}. Please provide step-by-step instructions."
             else:
                 zai_prompt = request.message
@@ -713,7 +735,16 @@ Respond with JSON in this format:
             
             if zai_response:
                 # Convert Z.ai response to our format
-                if needs_browser:
+                if needs_project:
+                    ai_output = f'''{{
+    "response": "{zai_response} Based on your request, I'll create a full-stack application for you.",
+    "action": null,
+    "needs_browser": false,
+    "needs_project": true,
+    "project_description": "{request.message}",
+    "project_type": "fullstack"
+}}'''
+                elif needs_browser:
                     user_msg_lower = request.message.lower()
                     
                     if "google" in user_msg_lower or "go to" in user_msg_lower:
@@ -731,7 +762,8 @@ Respond with JSON in this format:
         "type": "goto",
         "url": "{url}"
     }},
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}'''
                     elif "screenshot" in user_msg_lower:
                         ai_output = f'''{{
@@ -739,25 +771,37 @@ Respond with JSON in this format:
     "action": {{
         "type": "screenshot"
     }},
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}'''
                     else:
                         ai_output = f'''{{
     "response": "{zai_response}",
     "action": null,
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}'''
                 else:
                     ai_output = f'''{{
     "response": "{zai_response}",
     "action": null,
-    "needs_browser": false
+    "needs_browser": false,
+    "needs_project": false
 }}'''
             else:
                 # Enhanced fallback response based on user input
                 user_msg_lower = request.message.lower()
                 
-                if needs_browser:
+                if needs_project:
+                    ai_output = f'''{{
+    "response": "I'll create a full-stack application based on your requirements. This will include a modern frontend, robust backend, and proper project structure.",
+    "action": null,
+    "needs_browser": false,
+    "needs_project": true,
+    "project_description": "{request.message}",
+    "project_type": "fullstack"
+}}'''
+                elif needs_browser:
                     if "google" in user_msg_lower or "go to" in user_msg_lower:
                         url = "https://google.com"
                         if "github" in user_msg_lower:
@@ -773,7 +817,8 @@ Respond with JSON in this format:
         "type": "goto",
         "url": "{url}"
     }},
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}'''
                     elif "screenshot" in user_msg_lower or "take a" in user_msg_lower:
                         ai_output = '''{{
@@ -781,34 +826,31 @@ Respond with JSON in this format:
     "action": {{
         "type": "screenshot"
     }},
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}'''
-                    elif "click" in user_msg_lower:
+                    elif "test" in user_msg_lower:
                         ai_output = '''{{
-    "response": "I understand you want me to click something. Could you be more specific about what element to click?",
-    "action": null,
-    "needs_browser": true
-}}'''
-                    elif "extract" in user_msg_lower or "get" in user_msg_lower:
-                        ai_output = '''{{
-    "response": "I'll extract information from the current page for you.",
+    "response": "I'll help you test the website. Let me take a screenshot first to see what we're working with.",
     "action": {{
-        "type": "extract",
-        "extractors": ["title", "h1", "p"]
+        "type": "screenshot"
     }},
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}'''
                     else:
                         ai_output = f'''{{
     "response": "I can help you browse the web! I can navigate to websites, take screenshots, click elements, and extract information. What would you like me to do?",
     "action": null,
-    "needs_browser": true
+    "needs_browser": true,
+    "needs_project": false
 }}'''
                 else:
                     ai_output = f'''{{
-    "response": "I'm here to help! I can assist with web browsing tasks like navigating to websites, taking screenshots, and extracting information. What would you like to know or do?",
+    "response": "I'm here to help! I can assist with web browsing tasks and create full-stack applications. What would you like to do?",
     "action": null,
-    "needs_browser": false
+    "needs_browser": false,
+    "needs_project": false
 }}'''
 
         # Parse AI JSON output
@@ -817,11 +859,40 @@ Respond with JSON in this format:
             response_text = parsed.get("response", "I'm processing your request...")
             action = parsed.get("action")
             needs_browser_response = parsed.get("needs_browser", needs_browser)
+            needs_project_response = parsed.get("needs_project", needs_project)
+            project_description = parsed.get("project_description", "")
+            project_type = parsed.get("project_type", "fullstack")
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI JSON response: {ai_output}")
             response_text = "I understand you want me to help. Could you be more specific?"
             action = None
             needs_browser_response = False
+            needs_project_response = False
+            project_description = ""
+            project_type = "fullstack"
+
+        # Execute project creation if needed
+        project_created = None
+        if needs_project_response and project_description:
+            try:
+                project_info = await create_local_project(project_description, project_type)
+                
+                # Deploy to sandbox
+                sandbox_urls = await deploy_to_sandbox(project_info)
+                
+                project_created = {
+                    "project_id": project_info["project_id"],
+                    "project_name": project_info["project_name"],
+                    "files_created": project_info["files_created"],
+                    "template": project_info["template"],
+                    "sandbox_urls": sandbox_urls
+                }
+                
+                response_text += f"\n\n✅ Project created successfully!\n📁 Project ID: {project_info['project_id']}\n📋 Template: {project_info['template']}\n📂 Files: {len(project_info['files_created'])} files created"
+                
+            except Exception as e:
+                logger.error(f"Error creating project: {str(e)}")
+                response_text += f"\n\n❌ Failed to create project: {str(e)}"
 
         # Execute browser action if provided and we have a WebSocket endpoint
         screenshot_data = None
@@ -838,7 +909,8 @@ Respond with JSON in this format:
             message=request.message,
             response=response_text,
             browser_action=action,
-            screenshot=screenshot_data
+            screenshot=screenshot_data,
+            project_created=project_created
         )
         await db.chat_messages.insert_one(chat_obj.dict())
 
@@ -851,7 +923,8 @@ Respond with JSON in this format:
                     "response": response_text,
                     "browser_action": action,
                     "screenshot": screenshot_data,
-                    "needs_browser": needs_browser_response
+                    "needs_browser": needs_browser_response,
+                    "project_created": project_created
                 }
             }),
             request.session_id
@@ -862,7 +935,8 @@ Respond with JSON in this format:
             response=response_text,
             browser_action=action,
             screenshot=screenshot_data,
-            needs_browser=needs_browser_response
+            needs_browser=needs_browser_response,
+            project_created=project_created
         )
         
     except HTTPException:
