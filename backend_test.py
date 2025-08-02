@@ -2,18 +2,20 @@ import requests
 import sys
 import json
 from datetime import datetime
+import uuid
 
-class AgenticScraperAPITester:
+class AIBrowserTerminalTester:
     def __init__(self, base_url="https://582c5acb-bc67-484f-92b8-1f3ede237f4f.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.tests_run = 0
         self.tests_passed = 0
         self.ws_endpoint = None
+        self.session_id = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, timeout=30):
         """Run a single API test"""
-        url = f"{self.api_url}/{endpoint}"
+        url = f"{self.api_url}/{endpoint}" if endpoint else f"{self.api_url}/"
         headers = {'Content-Type': 'application/json'}
 
         self.tests_run += 1
@@ -55,17 +57,24 @@ class AgenticScraperAPITester:
             return False, {}
 
     def test_root_endpoint(self):
-        """Test the root API endpoint"""
+        """Test the root API endpoint - should return 'AI Terminal Assistant Ready'"""
         success, response = self.run_test(
             "Root API Endpoint",
             "GET",
             "",
             200
         )
-        return success
+        
+        if success and response.get('message') == 'AI Terminal Assistant Ready':
+            print("✅ Correct message received")
+            return True
+        elif success:
+            print(f"❌ Unexpected message: {response.get('message')}")
+            return False
+        return False
 
     def test_create_session(self):
-        """Test creating a Browserless session"""
+        """Test creating a browser session"""
         success, response = self.run_test(
             "Create Browser Session",
             "POST",
@@ -74,75 +83,144 @@ class AgenticScraperAPITester:
             timeout=45  # Browserless API can be slow
         )
         
-        if success and 'wsEndpoint' in response:
+        if success and 'wsEndpoint' in response and 'sessionId' in response:
             self.ws_endpoint = response['wsEndpoint']
+            self.session_id = response['sessionId']
             print(f"✅ WebSocket endpoint received: {self.ws_endpoint[:50]}...")
+            print(f"✅ Session ID received: {self.session_id}")
             return True
         elif success:
-            print("❌ Response missing 'wsEndpoint' field")
+            print("❌ Response missing required fields (wsEndpoint, sessionId)")
             return False
         return False
 
-    def test_run_task_without_session(self):
-        """Test running task without valid session (should fail)"""
-        success, response = self.run_test(
-            "Run Task Without Session",
-            "POST",
-            "run-task",
-            400,  # Should return 400 for missing wsEndpoint
-            data={
-                "wsEndpoint": "",
-                "targetUrl": "https://example.com"
-            }
-        )
-        return success
-
-    def test_run_task_without_url(self):
-        """Test running task without URL (should fail)"""
-        success, response = self.run_test(
-            "Run Task Without URL",
-            "POST",
-            "run-task",
-            400,  # Should return 400 for missing targetUrl
-            data={
-                "wsEndpoint": "ws://fake-endpoint",
-                "targetUrl": ""
-            }
-        )
-        return success
-
-    def test_run_task_with_valid_data(self):
-        """Test running task with valid session and URL"""
-        if not self.ws_endpoint:
-            print("❌ Skipping - No valid WebSocket endpoint available")
+    def test_chat_basic(self):
+        """Test basic chat functionality"""
+        if not self.session_id:
+            print("❌ Skipping - No valid session ID available")
             return False
 
         success, response = self.run_test(
-            "Run AI Scraping Task",
+            "Basic Chat Message",
             "POST",
-            "run-task",
+            "chat",
             200,
             data={
-                "wsEndpoint": self.ws_endpoint,
-                "targetUrl": "https://example.com"
+                "session_id": self.session_id,
+                "message": "Hello, what can you do?"
             },
-            timeout=60  # AI + browser automation can take time
+            timeout=30
         )
         
         if success:
             # Verify response structure
-            if 'extracted' in response and 'aiOutput' in response:
-                print("✅ Response has correct structure (extracted, aiOutput)")
-                
-                extracted = response.get('extracted', {})
-                if 'title' in extracted:
-                    print(f"✅ Page title extracted: {extracted['title']}")
-                if 'p' in extracted:
-                    print(f"✅ First paragraph extracted: {extracted['p'][:100]}...")
-                
+            required_fields = ['id', 'response']
+            if all(field in response for field in required_fields):
+                print("✅ Response has correct structure")
+                print(f"✅ AI Response: {response['response'][:100]}...")
                 return True
             else:
-                print("❌ Response missing required fields (extracted, aiOutput)")
+                print(f"❌ Response missing required fields: {required_fields}")
+                return False
+        return False
+
+    def test_chat_with_browser_action(self):
+        """Test chat with browser action"""
+        if not self.session_id or not self.ws_endpoint:
+            print("❌ Skipping - No valid session or WebSocket endpoint available")
+            return False
+
+        success, response = self.run_test(
+            "Chat with Browser Action",
+            "POST",
+            "chat",
+            200,
+            data={
+                "session_id": self.session_id,
+                "message": "Go to google.com",
+                "ws_endpoint": self.ws_endpoint
+            },
+            timeout=60  # Browser actions can take time
+        )
+        
+        if success:
+            # Verify response structure
+            required_fields = ['id', 'response']
+            if all(field in response for field in required_fields):
+                print("✅ Response has correct structure")
+                print(f"✅ AI Response: {response['response'][:100]}...")
+                
+                # Check if browser action was executed
+                if response.get('browser_action'):
+                    print("✅ Browser action included in response")
+                if response.get('screenshot'):
+                    print("✅ Screenshot included in response")
+                    
+                return True
+            else:
+                print(f"❌ Response missing required fields: {required_fields}")
+                return False
+        return False
+
+    def test_chat_screenshot_request(self):
+        """Test requesting a screenshot"""
+        if not self.session_id or not self.ws_endpoint:
+            print("❌ Skipping - No valid session or WebSocket endpoint available")
+            return False
+
+        success, response = self.run_test(
+            "Screenshot Request",
+            "POST",
+            "chat",
+            200,
+            data={
+                "session_id": self.session_id,
+                "message": "Take a screenshot",
+                "ws_endpoint": self.ws_endpoint
+            },
+            timeout=45
+        )
+        
+        if success and response.get('screenshot'):
+            print("✅ Screenshot returned as base64")
+            return True
+        elif success:
+            print("❌ No screenshot in response")
+            return False
+        return False
+
+    def test_chat_history(self):
+        """Test retrieving chat history"""
+        if not self.session_id:
+            print("❌ Skipping - No valid session ID available")
+            return False
+
+        success, response = self.run_test(
+            "Get Chat History",
+            "GET",
+            f"chat-history/{self.session_id}",
+            200
+        )
+        
+        if success:
+            if isinstance(response, list):
+                print(f"✅ Chat history retrieved - {len(response)} messages")
+                
+                # Verify message structure if any messages exist
+                if response:
+                    first_msg = response[0]
+                    required_fields = ['id', 'session_id', 'message', 'response', 'timestamp']
+                    if all(field in first_msg for field in required_fields):
+                        print("✅ Message structure is correct")
+                        return True
+                    else:
+                        print(f"❌ Message missing required fields: {required_fields}")
+                        return False
+                else:
+                    print("✅ Empty chat history (valid)")
+                    return True
+            else:
+                print("❌ Chat history should be a list")
                 return False
         return False
 
@@ -170,19 +248,20 @@ class AgenticScraperAPITester:
         return success
 
 def main():
-    print("🚀 Starting Agentic Scraper API Tests")
+    print("🚀 Starting AI Browser Terminal API Tests")
     print("=" * 50)
     
-    tester = AgenticScraperAPITester()
+    tester = AIBrowserTerminalTester()
     
     # Test sequence
     tests = [
         ("Root Endpoint", tester.test_root_endpoint),
         ("Status Endpoints", tester.test_status_endpoints),
         ("Create Browser Session", tester.test_create_session),
-        ("Run Task - No Session", tester.test_run_task_without_session),
-        ("Run Task - No URL", tester.test_run_task_without_url),
-        ("Run Task - Valid Data", tester.test_run_task_with_valid_data),
+        ("Basic Chat", tester.test_chat_basic),
+        ("Chat with Browser Action", tester.test_chat_with_browser_action),
+        ("Screenshot Request", tester.test_chat_screenshot_request),
+        ("Chat History", tester.test_chat_history),
     ]
     
     for test_name, test_func in tests:
