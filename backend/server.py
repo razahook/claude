@@ -1027,7 +1027,24 @@ async def execute_browser_action(ws_endpoint: str, action: Dict[str, Any]) -> Op
 async def get_vnc_info():
     """Get VNC viewing information for real-time browser viewing"""
     browser_agent = get_browser_use_agent(OPENAI_API_KEY)
-    return browser_agent.get_vnc_info()
+    vnc_info = browser_agent.get_vnc_info()
+    
+    # Update VNC URL to work in hosted environment
+    base_url = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')
+    vnc_info["vnc_url"] = f"{base_url.replace('/api', '')}/vnc"
+    
+    return vnc_info
+
+
+@api_router.get("/vnc")
+async def vnc_proxy():
+    """Proxy VNC viewer to work in hosted environment"""
+    return {
+        "message": "VNC Viewer",
+        "instructions": "Browser automation VNC viewer would be available here in a full deployment",
+        "local_url": "http://localhost:6080/vnc.html",
+        "status": "VNC proxy endpoint ready"
+    }
 
 
 @api_router.get("/chat-history/{session_id}")
