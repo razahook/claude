@@ -470,9 +470,10 @@ async def create_browserless_session():
 
 
 async def call_zai_api(prompt: str) -> str:
-    """Call Z.ai API as an alternative to OpenAI"""
+    """Call Z.ai API with GLM model for general conversation"""
     try:
         async with httpx.AsyncClient() as client:
+            # Try GLM-4.5 for general conversation first
             response = await client.post(
                 "https://api.z.ai/api/v1/agents",
                 headers={
@@ -481,7 +482,7 @@ async def call_zai_api(prompt: str) -> str:
                     "Accept-Language": "en-US,en"
                 },
                 json={
-                    "agent_id": "general_translation",  # Using general translation as it might work for general chat
+                    "agent_id": "glm-4.5-flash",  # Try GLM 4.5 first
                     "messages": [
                         {
                             "role": "user",
@@ -505,6 +506,49 @@ async def call_zai_api(prompt: str) -> str:
                         message = choice["messages"][0]
                         content = message.get("content", {})
                         return content.get("text", "")
+            
+            # If GLM doesn't work, try other agent IDs
+            alternative_agents = ["general_chat", "assistant", "glm-4", "general"]
+            
+            for agent_id in alternative_agents:
+                try:
+                    response = await client.post(
+                        "https://api.z.ai/api/v1/agents",
+                        headers={
+                            "Authorization": f"Bearer {ZAI_API_KEY}",
+                            "Content-Type": "application/json",
+                            "Accept-Language": "en-US,en"
+                        },
+                        json={
+                            "agent_id": agent_id,
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": prompt
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        timeout=30.0
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("choices") and len(data["choices"]) > 0:
+                            choice = data["choices"][0]
+                            if choice.get("messages") and len(choice["messages"]) > 0:
+                                message = choice["messages"][0]
+                                content = message.get("content", {})
+                                text_response = content.get("text", "")
+                                if text_response and not is_chinese_text(text_response):
+                                    return text_response
+                except Exception as e:
+                    logger.error(f"Error with agent_id {agent_id}: {str(e)}")
+                    continue
                         
             logger.error(f"Z.ai API error: {response.status_code} - {response.text}")
             return ""
@@ -512,6 +556,58 @@ async def call_zai_api(prompt: str) -> str:
     except Exception as e:
         logger.error(f"Error calling Z.ai API: {str(e)}")
         return ""
+
+
+def is_chinese_text(text: str) -> bool:
+    """Check if text contains primarily Chinese characters"""
+    chinese_chars = 0
+    total_chars = 0
+    
+    for char in text:
+        if char.strip():
+            total_chars += 1
+            if '\u4e00' <= char <= '\u9fff':  # Chinese character range
+                chinese_chars += 1
+    
+    if total_chars == 0:
+        return False
+    
+    return (chinese_chars / total_chars) > 0.3  # More than 30% Chinese
+
+
+def extract_url_from_message(message: str) -> str:
+    """Extract URL from user message more accurately"""
+    import re
+    
+    # Look for URLs in the message
+    url_pattern = r'https?://[^\s]+'
+    urls = re.findall(url_pattern, message)
+    
+    if urls:
+        return urls[0]
+    
+    # Look for domain patterns
+    domain_pattern = r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}'
+    domains = re.findall(domain_pattern, message)
+    
+    if domains:
+        domain = domains[0]
+        if not domain.startswith('http'):
+            return f"https://{domain}"
+        return domain
+    
+    # Fallback to common sites mentioned
+    message_lower = message.lower()
+    if "apex" in message_lower and "legends" in message_lower:
+        return "https://apexlegendsstatus.com"
+    elif "google" in message_lower:
+        return "https://google.com"
+    elif "github" in message_lower:
+        return "https://github.com"
+    elif "youtube" in message_lower:
+        return "https://youtube.com"
+    
+    return ""
 
 
 async def create_local_project(project_desc: str, project_type: str = "fullstack") -> Dict[str, Any]:
