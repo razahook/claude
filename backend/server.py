@@ -973,8 +973,27 @@ Analyze what they want to build and respond with project details.
                 
             except Exception as e:
                 logger.error(f"OpenAI API error: {str(e)}")
-                # Z.ai API temporarily disabled - using enhanced static responses
-                response_text = generate_smart_fallback_response(request.message)
+                # Direct fallback responses for common questions
+                message_lower = request.message.lower()
+                
+                if 'what day' in message_lower or 'day is it' in message_lower or 'current date' in message_lower or message_lower.strip() == 'today':
+                    import datetime
+                    current_date = datetime.datetime.now()
+                    response_text = f"Today is {current_date.strftime('%A, %B %d, %Y')}. The current time is {current_date.strftime('%I:%M %p')}.\n\nWhat else can I help you with? I can create applications or browse websites!"
+                
+                elif any(greeting in message_lower for greeting in ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"]):
+                    response_text = "Hello! I'm your AI assistant ready to help you create applications and browse websites. What would you like to do?"
+                
+                elif 'time' in message_lower and ('what' in message_lower or 'current' in message_lower):
+                    import datetime
+                    current_time = datetime.datetime.now()
+                    response_text = f"The current time is {current_time.strftime('%I:%M %p')} on {current_time.strftime('%A, %B %d, %Y')}.\n\nWhat would you like me to help you with?"
+                
+                elif any(word in message_lower for word in ["help", "what can you do", "capabilities"]):
+                    response_text = "I can help you with:\n\n🚀 **Create Applications**: Build React+Express or Next.js+FastAPI projects\n🌐 **Browse Websites**: Navigate, extract data, take screenshots\n📊 **Automate Tasks**: Web scraping, data extraction, browser automation\n\nJust tell me what you'd like to do!"
+                
+                else:
+                    response_text = f"I understand you said: \"{request.message}\"\n\nI can help you with:\n• Creating full-stack applications\n• Browsing websites and extracting data\n• Taking screenshots and web automation\n\nWhat would you like me to do?"
         
         # Execute legacy browser action if needed
         screenshot_data = None
