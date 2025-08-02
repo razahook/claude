@@ -510,21 +510,22 @@ export default function App() {
             </a>
           </div>
           <div className="session-controls">
-            {!wsEndpoint ? (
+            {!wsEndpoint && !loading ? (
               <button 
                 className="control-btn start-session" 
                 onClick={createSession}
                 disabled={loading}
               >
-                {loading ? "Starting..." : "Start Session"}
+                {loading ? "Starting..." : "Manual Start"}
               </button>
+            ) : wsEndpoint ? (
+              <span className="session-status">
+                🟢 Browser Ready
+              </span>
             ) : (
-              <button 
-                className="control-btn end-session" 
-                onClick={endSession}
-              >
-                End Session
-              </button>
+              <span className="session-status">
+                ⏳ Auto-Starting...
+              </span>
             )}
           </div>
         </div>
