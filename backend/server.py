@@ -82,18 +82,36 @@ async def get_status_checks():
 async def create_browserless_session():
     """Create a new Browserless session and return wsEndpoint"""
     try:
+        session_config = {
+            "ttl": 300000,  # 5 minutes
+            "stealth": True,
+            "headless": True,
+            "args": [
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-background-timer-throttling"
+            ]
+        }
+        
         async with httpx.AsyncClient() as http_client:
             response = await http_client.post(
-                f"https://production-sfo.browserless.io/sessions?token={BROWSERLESS_API_KEY}",
+                f"https://production-sfo.browserless.io/session?token={BROWSERLESS_API_KEY}",
+                headers={"Content-Type": "application/json"},
+                json=session_config,
                 timeout=30.0
             )
             
             if response.status_code != 200:
+                error_text = await response.atext() if hasattr(response, 'atext') else response.text
+                logger.error(f"Browserless API error: {response.status_code} - {error_text}")
                 raise HTTPException(status_code=500, detail=f"Browserless API error: {response.status_code}")
             
             data = response.json()
-            return BrowserSessionResponse(wsEndpoint=data["wsEndpoint"])
+            # The response contains 'connect' field with the WebSocket endpoint
+            return BrowserSessionResponse(wsEndpoint=data["connect"])
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating Browserless session: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to create browser session")
