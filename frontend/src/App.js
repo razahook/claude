@@ -100,7 +100,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
         // Toggle browser view based on needs_browser or browser_use_result
         if (onBrowserToggle) {
           const showBrowser = data.needs_browser || data.browser_use_result || data.browser_action !== null;
-          onBrowserToggle(showBrowser);
+          onBrowserToggle(showBrowser, data.browser_use_result);
         }
 
         // Notify parent about project creation
