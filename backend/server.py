@@ -15,6 +15,10 @@ from playwright.async_api import async_playwright
 import asyncio
 from openai import AsyncOpenAI
 import base64
+import tempfile
+import shutil
+import aiofiles
+import subprocess
 
 
 ROOT_DIR = Path(__file__).parent
@@ -29,6 +33,8 @@ db = client[os.environ['DB_NAME']]
 BROWSERLESS_API_KEY = os.environ['BROWSERLESS_API_KEY']
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
 ZAI_API_KEY = os.environ['ZAI_API_KEY']
+DAYTONA_API_KEY = os.environ.get('DAYTONA_API_KEY', '')
+REPLIT_API_KEY = os.environ.get('REPLIT_API_KEY', '')
 
 # Initialize OpenAI client
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
@@ -49,6 +55,7 @@ class ChatMessage(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     browser_action: Optional[Dict[str, Any]] = None
     screenshot: Optional[str] = None
+    project_created: Optional[Dict[str, Any]] = None
 
 class ChatRequest(BaseModel):
     session_id: str
@@ -61,10 +68,24 @@ class ChatResponse(BaseModel):
     browser_action: Optional[Dict[str, Any]] = None
     screenshot: Optional[str] = None
     needs_browser: Optional[bool] = False
+    project_created: Optional[Dict[str, Any]] = None
 
 class BrowserSessionResponse(BaseModel):
     wsEndpoint: str
     sessionId: str
+
+class ProjectRequest(BaseModel):
+    description: str
+    session_id: str
+    project_type: str = "fullstack"  # fullstack, frontend, backend, api
+
+class ProjectResponse(BaseModel):
+    project_id: str
+    project_name: str
+    files_created: List[str]
+    local_path: str
+    sandbox_url: Optional[str] = None
+    preview_url: Optional[str] = None
 
 class StatusCheck(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -73,6 +94,289 @@ class StatusCheck(BaseModel):
 
 class StatusCheckCreate(BaseModel):
     client_name: str
+
+
+# Full Stack Development Templates
+TEMPLATES = {
+    "react_express": {
+        "name": "React + Express.js",
+        "description": "Full-stack app with React frontend and Express.js backend",
+        "files": {
+            "package.json": """{
+  "name": "fullstack-app",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \\"npm run server\\" \\"npm run client\\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-deps": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}""",
+            "server/package.json": """{
+  "name": "server",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}""",
+            "server/server.js": """const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json());
+
+app.get('/api/health', (req, res) => {
+  res.json({ message: 'Server is running!' });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});""",
+            "client/package.json": """{
+  "name": "client",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "axios": "^1.5.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+  },
+  "proxy": "http://localhost:5000"
+}""",
+            "client/public/index.html": """<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React App</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>""",
+            "client/src/index.js": """import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);""",
+            "client/src/App.js": """import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import './App.css';
+
+function App() {
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    axios.get('/api/health')
+      .then(response => {
+        setMessage(response.data.message);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        setMessage('Failed to connect to server');
+      });
+  }, []);
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Full Stack App</h1>
+        <p>{message}</p>
+      </header>
+    </div>
+  );
+}
+
+export default App;""",
+            "client/src/App.css": """.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+h1 {
+  margin-bottom: 20px;
+}""",
+            "README.md": """# Full Stack Application
+
+## Setup
+1. Run `npm run install-deps` to install all dependencies
+2. Run `npm run dev` to start both frontend and backend
+3. Frontend: http://localhost:3000
+4. Backend: http://localhost:5000
+
+## Structure
+- `/client` - React frontend
+- `/server` - Express.js backend
+"""
+        }
+    },
+    "next_fastapi": {
+        "name": "Next.js + FastAPI",
+        "description": "Modern full-stack with Next.js frontend and FastAPI backend",
+        "files": {
+            "package.json": """{
+  "name": "nextjs-fastapi-app",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \\"npm run backend\\" \\"npm run frontend\\"",
+    "backend": "cd backend && python -m uvicorn main:app --reload --port 8000",
+    "frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "install-deps": "cd frontend && npm install && cd ../backend && pip install -r requirements.txt"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}""",
+            "backend/main.py": """from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class Message(BaseModel):
+    text: str
+
+@app.get("/api/health")
+def health_check():
+    return {"message": "FastAPI server is running!"}
+
+@app.post("/api/message")
+def create_message(message: Message):
+    return {"received": message.text, "processed": True}
+""",
+            "backend/requirements.txt": """fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+""",
+            "frontend/package.json": """{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "axios": "^1.5.0"
+  }
+}""",
+            "frontend/pages/index.js": """import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+export default function Home() {
+  const [message, setMessage] = useState('');
+  const [inputText, setInputText] = useState('');
+
+  useEffect(() => {
+    axios.get('http://localhost:8000/api/health')
+      .then(response => {
+        setMessage(response.data.message);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        setMessage('Failed to connect to backend');
+      });
+  }, []);
+
+  const sendMessage = async () => {
+    try {
+      const response = await axios.post('http://localhost:8000/api/message', {
+        text: inputText
+      });
+      setMessage(`Backend processed: ${response.data.received}`);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  return (
+    <div style={{ padding: '20px', textAlign: 'center' }}>
+      <h1>Next.js + FastAPI</h1>
+      <p>{message}</p>
+      <div style={{ margin: '20px' }}>
+        <input
+          type="text"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          placeholder="Enter a message"
+          style={{ padding: '10px', margin: '10px' }}
+        />
+        <button onClick={sendMessage} style={{ padding: '10px 20px' }}>
+          Send to Backend
+        </button>
+      </div>
+    </div>
+  );
+}""",
+            "README.md": """# Next.js + FastAPI Application
+
+## Setup
+1. Run `npm run install-deps` to install dependencies
+2. Run `npm run dev` to start both servers
+3. Frontend: http://localhost:3000
+4. Backend: http://localhost:8000
+
+## Structure
+- `/frontend` - Next.js frontend
+- `/backend` - FastAPI backend
+"""
+        }
+    }
+}
 
 
 # WebSocket connection manager
