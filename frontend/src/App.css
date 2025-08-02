@@ -368,6 +368,16 @@ body {
   gap: 0.5rem;
 }
 
+.session-status {
+  color: #3fb950;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.3rem 0.6rem;
+  background: #2d4a2233;
+  border-radius: 12px;
+  border: 1px solid #3fb95033;
+}
+
 .control-btn {
   padding: 0.4rem 0.8rem;
   border: 1px solid #30363d;
