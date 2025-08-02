@@ -60,6 +60,7 @@ class ChatResponse(BaseModel):
     response: str
     browser_action: Optional[Dict[str, Any]] = None
     screenshot: Optional[str] = None
+    needs_browser: Optional[bool] = False
 
 class BrowserSessionResponse(BaseModel):
     wsEndpoint: str
