@@ -56,6 +56,152 @@ body {
   border-color: #ff6b6b;
 }
 
+/* Enhanced Embedded Browser View */
+.embedded-browser {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.browser-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  min-height: 500px;
+  background: #0d1117;
+}
+
+.browser-stream-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 400px;
+  background: linear-gradient(135deg, #161b22 0%, #21262d 100%);
+  border-radius: 8px;
+  margin: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.stream-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.8;
+}
+
+.stream-status h3 {
+  color: #58a6ff;
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.stream-status p {
+  color: #8b949e;
+  line-height: 1.4;
+  margin-bottom: 1rem;
+}
+
+.connection-status {
+  font-size: 0.75rem;
+  margin-left: 0.5rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.connection-status.connected {
+  color: #3fb950;
+  background: #2d4a2233;
+}
+
+.connection-status.connecting,
+.connection-status.disconnected {
+  color: #f85149;
+  background: #4c1e1e33;
+}
+
+.browser-minimized {
+  padding: 1rem;
+  background: #161b22;
+  border-radius: 6px;
+  margin: 0.5rem;
+}
+
+.minimized-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-icon {
+  font-size: 0.8rem;
+}
+
+.expand-btn {
+  background: #238636;
+  border: none;
+  color: white;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.expand-btn:hover {
+  background: #2ea043;
+}
+
+.last-action {
+  background: #0d419d22;
+  border: 1px solid #1f6feb;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.last-action strong {
+  color: #58a6ff;
+}
+
+.extracted-preview {
+  margin-top: 0.5rem;
+}
+
+.extracted-preview summary {
+  cursor: pointer;
+  color: #7c3aed;
+  font-weight: 500;
+}
+
+.extracted-preview pre {
+  background: #161b22;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  overflow-x: auto;
+}
+
+/* Auto-layout adjustments */
+.app-body.split-view .browser-panel {
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 /* Enhanced VNC Browser View */
 .vnc-controls {
   display: flex;
