@@ -176,22 +176,26 @@ Respond with JSON:
         
         async with async_playwright() as p:
             try:
-                # Connect to the Browserless session
+                # Connect to the Browserless session using the WebSocket endpoint
                 browser = await p.chromium.connect_over_cdp(request.wsEndpoint)
                 
-                # Get the existing page or create new one
-                pages = browser.contexts[0].pages if browser.contexts and browser.contexts[0].pages else []
+                # Get or create a page
+                pages = []
+                for context in browser.contexts:
+                    pages.extend(context.pages)
+                
                 if pages:
                     page = pages[0]
                 else:
-                    context = browser.contexts[0] if browser.contexts else await browser.new_context()
+                    # Create a new context and page if none exist
+                    context = await browser.new_context()
                     page = await context.new_page()
 
                 # Execute the AI-generated actions
                 for action in actions:
                     if action.get("type") == "goto":
-                        await page.goto(action.get("url"), wait_until="networkidle", timeout=30000)
-                        await asyncio.sleep(2)  # Wait for page to stabilize
+                        await page.goto(action.get("url"), wait_until="domcontentloaded", timeout=30000)
+                        await asyncio.sleep(3)  # Wait for page to stabilize
                         
                     elif action.get("type") == "extract":
                         selectors = action.get("selectors", [])
@@ -203,21 +207,23 @@ Respond with JSON:
                                     # Get first paragraph text
                                     first_p = await page.query_selector("p")
                                     if first_p:
-                                        extracted[selector] = await first_p.text_content()
+                                        text_content = await first_p.text_content()
+                                        extracted[selector] = text_content.strip() if text_content else ""
                                     else:
                                         extracted[selector] = ""
                                 else:
                                     # Generic selector extraction
                                     element = await page.query_selector(selector)
                                     if element:
-                                        extracted[selector] = await element.text_content()
+                                        text_content = await element.text_content()
+                                        extracted[selector] = text_content.strip() if text_content else ""
                                     else:
                                         extracted[selector] = ""
                             except Exception as e:
                                 logger.error(f"Error extracting {selector}: {str(e)}")
                                 extracted[selector] = f"Error: {str(e)}"
 
-                await browser.close()
+                # Don't close the browser - let Browserless handle it
                 
             except Exception as e:
                 logger.error(f"Playwright execution error: {str(e)}")
