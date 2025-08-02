@@ -23,8 +23,8 @@ class BrowserUseAgent:
             base_url = backend_url
         self.vnc_url = f"{base_url}/vnc-stream"
         
-    async def execute_task(self, task: str, session_id: str) -> Dict[str, Any]:
-        """Execute a browser task using browser-use agent"""
+    async def execute_task(self, task: str, session_id: str, ws_endpoint: str = None) -> Dict[str, Any]:
+        """Execute a browser task using browser-use agent with Browserless integration"""
         
         try:
             # Try to import browser-use components with updated API
@@ -42,14 +42,45 @@ class BrowserUseAgent:
                 temperature=0.7
             )
             
-            # Create the agent with Browserless configuration
+            # If we have a WebSocket endpoint, connect to Browserless browser
+            browser = None
+            page = None
+            
+            if ws_endpoint:
+                try:
+                    from playwright.async_api import async_playwright
+                    
+                    playwright = await async_playwright().start()
+                    browser = await playwright.chromium.connect_over_cdp(ws_endpoint)
+                    
+                    # Get or create a page
+                    pages = []
+                    for context in browser.contexts:
+                        pages.extend(context.pages)
+                    
+                    if pages:
+                        page = pages[0]
+                    else:
+                        context = await browser.new_context()
+                        page = await context.new_page()
+                    
+                    logger.info(f"Connected to Browserless browser for task: {task}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to connect to Browserless: {str(e)}")
+                    # Fallback without browser connection
+                    pass
+            
+            # Create the agent
             agent = Agent(
                 task=task,
-                llm=llm, 
+                llm=llm,  
+                browser=browser,
+                page=page,
                 use_vision=True,
                 save_conversation_path=f"/tmp/browser_use_{session_id}.json",
-                # Configure to use Browserless.io instead of local browser
-                use_browser=False  # We'll use the Browserless WebSocket connection instead
+                max_failures=2,
+                retry_delay=5
             )
             
             # Store for potential cancellation
@@ -69,7 +100,8 @@ class BrowserUseAgent:
                 "result": str(result),
                 "vnc_url": self.vnc_url,
                 "conversation_path": f"/tmp/browser_use_{session_id}.json",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
+                "browserless_connected": ws_endpoint is not None
             }
             
             # Try to extract structured data if available
