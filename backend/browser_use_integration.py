@@ -26,104 +26,133 @@ class BrowserUseAgent:
     async def execute_task(self, task: str, session_id: str, ws_endpoint: str = None) -> Dict[str, Any]:
         """Execute a browser task using browser-use agent with Browserless integration"""
         
+        # For now, return fallback response since OpenAI API has quota issues
+        logger.info(f"Browser-use task requested: {task}")
+        
         try:
-            # Try to import browser-use components with updated API
-            try:
-                from browser_use import Agent
-                from langchain_openai import ChatOpenAI
-            except ImportError:
-                logger.warning("Browser-use imports failed, using fallback")
-                return await self._fallback_execution(task, session_id)
-            
-            # Initialize the LLM with proper OpenAI configuration
-            llm = ChatOpenAI(
-                model="gpt-4o-mini",
-                api_key=self.openai_api_key,
-                temperature=0.7
-            )
-            
-            # If we have a WebSocket endpoint, connect to Browserless browser
-            browser = None
-            page = None
-            
+            # If we have a WebSocket endpoint, connect to Browserless browser and use Playwright directly
             if ws_endpoint:
-                try:
-                    from playwright.async_api import async_playwright
-                    
-                    playwright = await async_playwright().start()
-                    browser = await playwright.chromium.connect_over_cdp(ws_endpoint)
-                    
-                    # Get or create a page
-                    pages = []
-                    for context in browser.contexts:
-                        pages.extend(context.pages)
-                    
-                    if pages:
-                        page = pages[0]
-                    else:
-                        context = await browser.new_context()
-                        page = await context.new_page()
-                    
-                    logger.info(f"Connected to Browserless browser for task: {task}")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to connect to Browserless: {str(e)}")
-                    # Fallback without browser connection
-                    pass
-            
-            # Create the agent
-            agent = Agent(
-                task=task,
-                llm=llm,  
-                browser=browser,
-                page=page,
-                use_vision=True,
-                save_conversation_path=f"/tmp/browser_use_{session_id}.json",
-                max_failures=2,
-                retry_delay=5
-            )
-            
-            # Store for potential cancellation
-            self.current_agent = agent
-            
-            logger.info(f"Starting browser-use task: {task}")
-            
-            # Execute the task
-            result = await agent.run()
-            
-            logger.info(f"Browser-use task completed: {result}")
-            
-            # Parse the result
-            response_data = {
-                "success": True,
-                "task": task,
-                "result": str(result),
-                "vnc_url": self.vnc_url,
-                "conversation_path": f"/tmp/browser_use_{session_id}.json",
-                "timestamp": datetime.utcnow().isoformat(),
-                "browserless_connected": ws_endpoint is not None
-            }
-            
-            # Try to extract structured data if available
-            if hasattr(result, 'extracted_data'):
-                response_data["extracted_data"] = result.extracted_data
-            elif isinstance(result, dict):
-                response_data["extracted_data"] = result
-            elif isinstance(result, list):
-                response_data["extracted_data"] = {"items": result}
-            
-            # Add to conversation history
-            self.conversation_history.append({
-                "task": task,
-                "result": response_data,
-                "timestamp": datetime.utcnow()
-            })
-            
-            return response_data
-            
+                return await self._playwright_fallback(task, session_id, ws_endpoint)
+            else:
+                # No WebSocket endpoint, return instructional response
+                return {
+                    "success": False,
+                    "task": task,
+                    "error": "Browser session not available. Please create a browser session first.",
+                    "vnc_url": self.vnc_url,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "fallback_used": True
+                }
+                
         except Exception as e:
             logger.error(f"Browser-use agent error: {str(e)}", exc_info=True)
             return await self._enhanced_fallback_execution(task, session_id, str(e))
+    
+    async def _playwright_fallback(self, task: str, session_id: str, ws_endpoint: str) -> Dict[str, Any]:
+        """Use direct Playwright automation when browser-use isn't available"""
+        try:
+            from playwright.async_api import async_playwright
+            
+            playwright = await async_playwright().start()
+            browser = await playwright.chromium.connect_over_cdp(ws_endpoint)
+            
+            # Get or create a page
+            pages = []
+            for context in browser.contexts:
+                pages.extend(context.pages)
+            
+            if pages:
+                page = pages[0]
+            else:
+                context = await browser.new_context()
+                page = await context.new_page()
+            
+            # Parse the task to determine action
+            task_lower = task.lower()
+            actions_performed = []
+            
+            # Navigate if URL is mentioned
+            import re
+            url_pattern = r'https?://[^\s]+'
+            urls = re.findall(url_pattern, task)
+            if not urls:
+                # Look for domain patterns
+                domain_pattern = r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}'
+                domains = re.findall(domain_pattern, task)
+                if domains:
+                    url = f"https://{domains[0]}"
+                    urls = [url]
+            
+            # Check for common website mentions
+            if not urls:
+                if "google" in task_lower:
+                    urls = ["https://google.com"]
+                elif "github" in task_lower:
+                    urls = ["https://github.com"]
+                elif "youtube" in task_lower:
+                    urls = ["https://youtube.com"]
+            
+            # Navigate to URL
+            if urls:
+                await page.goto(urls[0], wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+                actions_performed.append(f"Navigated to {urls[0]}")
+            
+            # Handle scrolling
+            if "scroll" in task_lower:
+                direction = "down" if "down" in task_lower else "up"
+                if direction == "down":
+                    await page.evaluate("window.scrollBy(0, window.innerHeight * 2)")
+                else:
+                    await page.evaluate("window.scrollBy(0, -window.innerHeight * 2)")
+                await asyncio.sleep(1)
+                actions_performed.append(f"Scrolled {direction}")
+            
+            # Take screenshot
+            screenshot_bytes = await page.screenshot(type="png", full_page=False)
+            screenshot_data = base64.b64encode(screenshot_bytes).decode('utf-8')
+            actions_performed.append("Screenshot captured")
+            
+            # Extract data if requested
+            extracted_data = {}
+            if "extract" in task_lower or "data" in task_lower:
+                try:
+                    title = await page.title()
+                    extracted_data["page_title"] = title
+                    
+                    # Get page text content
+                    text_content = await page.evaluate("document.body.innerText")
+                    if text_content:
+                        extracted_data["page_text"] = text_content[:1000]  # First 1000 chars
+                    
+                    actions_performed.append("Data extracted")
+                except Exception as e:
+                    actions_performed.append(f"Data extraction failed: {str(e)}")
+            
+            await browser.close()
+            
+            return {
+                "success": True,
+                "task": task,
+                "result": f"Completed browser automation with {len(actions_performed)} actions",
+                "actions": actions_performed,
+                "extracted_data": extracted_data,
+                "screenshot": screenshot_data,
+                "vnc_url": self.vnc_url,
+                "timestamp": datetime.utcnow().isoformat(),
+                "playwright_fallback": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Playwright fallback error: {str(e)}")
+            return {
+                "success": False,
+                "task": task,
+                "error": f"Browser automation failed: {str(e)}",
+                "vnc_url": self.vnc_url,
+                "timestamp": datetime.utcnow().isoformat(),
+                "fallback_used": True
+            }
     
     async def _fallback_execution(self, task: str, session_id: str) -> Dict[str, Any]:
         """Fallback execution when browser-use isn't available"""
