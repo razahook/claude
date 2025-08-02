@@ -4,7 +4,7 @@ import "./App.css";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Terminal Chat Interface Component
+// Enhanced Terminal Chat Interface Component
 const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserToggle, onProjectCreated }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -38,7 +38,10 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
           response: msg.response,
           screenshot: msg.screenshot,
           needsBrowser: msg.browser_action !== null,
-          projectCreated: msg.project_created
+          projectCreated: msg.project_created,
+          browserUseResult: msg.browser_use_result,
+          vncUrl: msg.vnc_url,
+          conversationContinues: msg.conversation_continues !== false
         })));
       }
     } catch (error) {
@@ -66,7 +69,8 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
         body: JSON.stringify({
           session_id: sessionId,
           message: userMessage.content,
-          ws_endpoint: wsEndpoint
+          ws_endpoint: wsEndpoint,
+          use_browser_use: true
         })
       });
 
@@ -81,6 +85,9 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
             lastMsg.screenshot = data.screenshot;
             lastMsg.needsBrowser = data.needs_browser || data.browser_action !== null;
             lastMsg.projectCreated = data.project_created;
+            lastMsg.browserUseResult = data.browser_use_result;
+            lastMsg.vncUrl = data.vnc_url;
+            lastMsg.conversationContinues = data.conversation_continues !== false;
           }
           return updated;
         });
@@ -90,9 +97,10 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
           onScreenshotUpdate(data.screenshot);
         }
 
-        // Toggle browser view based on needs_browser
+        // Toggle browser view based on needs_browser or browser_use_result
         if (onBrowserToggle) {
-          onBrowserToggle(data.needs_browser || data.browser_action !== null);
+          const showBrowser = data.needs_browser || data.browser_use_result || data.browser_action !== null;
+          onBrowserToggle(showBrowser);
         }
 
         // Notify parent about project creation
@@ -109,6 +117,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
         const lastMsg = updated[updated.length - 1];
         if (lastMsg.type === 'user') {
           lastMsg.response = "Error: Failed to send message. Please try again.";
+          lastMsg.conversationContinues = true;
         }
         return updated;
       });
@@ -124,12 +133,29 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
     }
   };
 
+  const renderMessage = (content) => {
+    // Enhanced markdown-like rendering for better conversation flow
+    return content.split('\n').map((line, index) => {
+      if (line.startsWith('**') && line.endsWith('**')) {
+        return <div key={index} className="message-header">{line.slice(2, -2)}</div>;
+      } else if (line.startsWith('- ') || line.startsWith('• ')) {
+        return <div key={index} className="message-bullet">• {line.slice(2)}</div>;
+      } else if (line.startsWith('```')) {
+        return <div key={index} className="message-code">```</div>;
+      } else if (line.trim() === '') {
+        return <br key={index} />;
+      } else {
+        return <div key={index} className="message-line">{line}</div>;
+      }
+    });
+  };
+
   return (
     <div className="terminal-chat">
       <div className="terminal-header">
         <div className="terminal-title">
           <span className="terminal-icon">$</span>
-          AI Full-Stack Developer
+          AI Full-Stack Developer + Browser-Use
         </div>
         <div className="session-info">
           Session: {sessionId?.substring(0, 8) || 'Not Connected'}
@@ -140,13 +166,13 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
         <div className="chat-messages">
           {messages.length === 0 && (
             <div className="welcome-message">
-              <span className="prompt">$</span> Welcome to AI Full-Stack Developer Terminal
+              <span className="prompt">$</span> Welcome to AI Full-Stack Developer with Real-Time Browser
               <br/>
-              <span className="prompt">$</span> I can create complete applications and browse the web.
+              <span className="prompt">$</span> I can create complete applications and browse the web in real-time.
               <br/>
-              <span className="prompt">$</span> Try: "Create a todo app" or "Go to google.com"
+              <span className="prompt">$</span> Try: "Create a todo app" or "Go to apex legends stats and extract data"
               <br/>
-              <span className="prompt">$</span> Browser view appears when web browsing is needed.
+              <span className="prompt">$</span> Watch me work live with VNC viewer!
             </div>
           )}
           
@@ -158,12 +184,15 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
                 <span className="timestamp">{msg.timestamp.toLocaleTimeString()}</span>
                 {msg.needsBrowser && <span className="browser-badge">🌐</span>}
                 {msg.projectCreated && <span className="project-badge">🚀</span>}
+                {msg.browserUseResult && <span className="browser-use-badge">🔴</span>}
               </div>
               
               {msg.response && (
                 <div className="ai-response">
                   <span className="prompt ai-prompt">ai@developer:~$</span>
-                  <span className="message-content">{msg.response}</span>
+                  <div className="message-content enhanced">
+                    {renderMessage(msg.response)}
+                  </div>
                 </div>
               )}
 
@@ -191,13 +220,32 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
                   </div>
                 </div>
               )}
+
+              {msg.browserUseResult && (
+                <div className="browser-use-info">
+                  <div className="browser-use-header">
+                    <span className="browser-use-icon">🔴</span>
+                    <span>Real-Time Browser Task</span>
+                    <span className={`status ${msg.browserUseResult.success ? 'success' : 'error'}`}>
+                      {msg.browserUseResult.success ? '✅ Success' : '❌ Error'}
+                    </span>
+                  </div>
+                  {msg.vncUrl && (
+                    <div className="vnc-link">
+                      <a href={msg.vncUrl} target="_blank" rel="noopener noreferrer">
+                        🖥️ Watch Live: {msg.vncUrl}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
           
           {loading && (
             <div className="loading-message">
               <span className="prompt ai-prompt">ai@developer:~$</span>
-              <span className="loading-dots">Processing your request...</span>
+              <span className="loading-dots">Processing your request with real-time browser automation...</span>
             </div>
           )}
           
@@ -211,7 +259,7 @@ const TerminalChat = ({ sessionId, wsEndpoint, onScreenshotUpdate, onBrowserTogg
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask me to create apps or browse the web..."
+            placeholder="Ask me to create apps or browse the web in real-time..."
             disabled={loading}
             className="terminal-text-input"
           />
