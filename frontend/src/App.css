@@ -113,22 +113,32 @@ body {
   height: 20px;
 }
 
-/* App Body - Split Layout */
+/* App Body - Conditional Split Layout */
 .app-body {
   flex: 1;
   display: flex;
   overflow: hidden;
 }
 
-.chat-panel {
+.app-body.chat-only .chat-panel {
+  width: 100%;
+}
+
+.app-body.split-view .chat-panel {
   width: 50%;
   border-right: 1px solid #30363d;
+}
+
+.app-body.split-view .browser-panel {
+  width: 50%;
+}
+
+.chat-panel {
   display: flex;
   flex-direction: column;
 }
 
 .browser-panel {
-  width: 50%;
   display: flex;
   flex-direction: column;
 }
