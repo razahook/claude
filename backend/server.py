@@ -514,6 +514,112 @@ async def call_zai_api(prompt: str) -> str:
         return ""
 
 
+async def create_local_project(project_desc: str, project_type: str = "fullstack") -> Dict[str, Any]:
+    """Create a project locally in a temporary directory"""
+    try:
+        # Create temporary directory for the project
+        temp_dir = tempfile.mkdtemp(prefix="ai_project_")
+        project_id = str(uuid.uuid4())
+        project_name = f"ai-generated-{project_id[:8]}"
+        
+        # Determine template based on project description and type
+        template_name = determine_template(project_desc, project_type)
+        template = TEMPLATES.get(template_name, TEMPLATES["react_express"])
+        
+        # Create project structure
+        files_created = []
+        for file_path, content in template["files"].items():
+            full_path = os.path.join(temp_dir, file_path)
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            
+            async with aiofiles.open(full_path, 'w') as f:
+                await f.write(content)
+            files_created.append(file_path)
+        
+        # Store project info in database
+        project_info = {
+            "project_id": project_id,
+            "project_name": project_name,
+            "description": project_desc,
+            "template": template_name,
+            "local_path": temp_dir,
+            "files_created": files_created,
+            "created_at": datetime.utcnow(),
+            "status": "created"
+        }
+        
+        await db.projects.insert_one(project_info)
+        
+        return {
+            "project_id": project_id,
+            "project_name": project_name,
+            "local_path": temp_dir,
+            "files_created": files_created,
+            "template": template_name
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating local project: {str(e)}")
+        raise Exception(f"Failed to create project: {str(e)}")
+
+
+def determine_template(description: str, project_type: str) -> str:
+    """Determine which template to use based on description"""
+    desc_lower = description.lower()
+    
+    if "next" in desc_lower or "fastapi" in desc_lower or "python" in desc_lower:
+        return "next_fastapi"
+    elif "react" in desc_lower and "express" in desc_lower:
+        return "react_express"
+    elif project_type == "fullstack":
+        return "react_express"  # Default
+    else:
+        return "react_express"
+
+
+async def create_daytona_sandbox(project_path: str) -> Optional[str]:
+    """Create a Daytona sandbox (if API key is available)"""
+    if not DAYTONA_API_KEY:
+        return None
+        
+    try:
+        # This would integrate with Daytona API when available
+        # For now, return a placeholder
+        return f"https://daytona-sandbox-{uuid.uuid4().hex[:8]}.app"
+    except Exception as e:
+        logger.error(f"Error creating Daytona sandbox: {str(e)}")
+        return None
+
+
+async def deploy_to_sandbox(project_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Deploy project to available sandbox services"""
+    sandbox_urls = {}
+        
+    # Try Daytona first
+    daytona_url = await create_daytona_sandbox(project_info["local_path"])
+    if daytona_url:
+        sandbox_urls["daytona"] = daytona_url
+    
+    # For demo purposes, create local preview URLs
+    project_id = project_info["project_id"]
+    sandbox_urls["local_preview"] = f"http://localhost:3000?project={project_id}"
+    sandbox_urls["api_preview"] = f"http://localhost:5000?project={project_id}"
+    
+    return sandbox_urls
+
+
+def requires_project_creation(message: str) -> bool:
+    """Determine if a message requires creating a new project"""
+    message_lower = message.lower()
+    creation_keywords = [
+        "create", "build", "make", "generate", "new project",
+        "full stack", "website", "web app", "application",
+        "frontend", "backend", "api", "react app", "next.js"
+    ]
+    
+    return any(keyword in message_lower for keyword in creation_keywords)
+
+
 def requires_browser_action(message: str) -> bool:
     """Determine if a message requires browser interaction"""
     message_lower = message.lower()
@@ -524,7 +630,7 @@ def requires_browser_action(message: str) -> bool:
         "click", "button", "link", "element",
         "search", "find", "extract", "scrape", "get",
         "fill", "form", "input", "type",
-        "scroll", "wait", "load"
+        "scroll", "wait", "load", "test"
     ]
     
     return any(keyword in message_lower for keyword in browser_keywords)
