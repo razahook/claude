@@ -243,6 +243,7 @@ export default function App() {
   const [screenshot, setScreenshot] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showBrowser, setShowBrowser] = useState(false);
 
   useEffect(() => {
     // Generate session ID on mount
@@ -281,10 +282,15 @@ export default function App() {
     setWsEndpoint("");
     setScreenshot(null);
     setSessionId(generateSessionId());
+    setShowBrowser(false);
   };
 
   const handleScreenshotUpdate = (newScreenshot) => {
     setScreenshot(newScreenshot);
+  };
+
+  const handleBrowserToggle = (needsBrowser) => {
+    setShowBrowser(needsBrowser);
   };
 
   return (
@@ -321,21 +327,24 @@ export default function App() {
         </div>
       )}
 
-      <div className="app-body">
+      <div className={`app-body ${showBrowser ? 'split-view' : 'chat-only'}`}>
         <div className="chat-panel">
           <TerminalChat 
             sessionId={sessionId}
             wsEndpoint={wsEndpoint}
             onScreenshotUpdate={handleScreenshotUpdate}
+            onBrowserToggle={handleBrowserToggle}
           />
         </div>
         
-        <div className="browser-panel">
-          <BrowserView 
-            wsEndpoint={wsEndpoint}
-            screenshot={screenshot}
-          />
-        </div>
+        {showBrowser && (
+          <div className="browser-panel">
+            <BrowserView 
+              wsEndpoint={wsEndpoint}
+              screenshot={screenshot}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
