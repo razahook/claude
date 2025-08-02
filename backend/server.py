@@ -811,9 +811,9 @@ Analyze what they want to build and respond with project details.
                 response_text = f"❌ **Project Creation Failed**: {str(e)}\n\nLet me help you with something else. What would you like to do?"
                 
         elif needs_browser and request.use_browser_use:
-            # Use enhanced browserless system with better conversation flow
+            # Use browser-use system with enhanced integration
             try:
-                response_text = f"🌐 **Starting browser automation for your request...**\n\n**Task**: {request.message}\n\n**Status**: Launching browser and beginning task execution...\n\n**Real-time viewing**: Browser automation in progress!"
+                response_text = f"🌐 **Starting real-time browser automation...**\n\n**Task**: {request.message}\n\n**Status**: Launching browser and beginning task execution...\n\n**✨ Real-time viewing**: Browser automation in progress!"
                 
                 # Create browser session if not provided
                 if not request.ws_endpoint:
@@ -827,170 +827,56 @@ Analyze what they want to build and respond with project details.
                             "success": False,
                             "task": request.message,
                             "error": f"Browser session creation failed: {str(e)}",
-                            "vnc_url": vnc_url,
+                            "vnc_url": None,
                             "timestamp": datetime.utcnow().isoformat()
                         }
                 else:
                     ws_endpoint = request.ws_endpoint
                 
                 if ws_endpoint:
-                    # Execute enhanced browser task with Playwright
-                    extracted_url = extract_url_from_message(request.message)
-                    user_msg_lower = request.message.lower()
-                    
-                    extracted_data = {}
-                    action_results = []
-                    
-                    # Execute browser automation
-                    async with async_playwright() as p:
-                        try:
-                            browser = await p.chromium.connect_over_cdp(ws_endpoint)
+                    # Execute browser-use task with WebSocket connection
+                    try:
+                        browser_use_result = await browser_agent.execute_task(request.message, request.session_id, ws_endpoint)
+                        
+                        if browser_use_result.get("success"):
+                            response_text = f"✅ **Browser Task Completed Successfully!**\n\n**What I accomplished**: {request.message}\n\n"
                             
-                            # Get or create a page
-                            pages = []
-                            for context in browser.contexts:
-                                pages.extend(context.pages)
+                            if browser_use_result.get("result"):
+                                response_text += f"**📋 Result**: {browser_use_result['result']}\n\n"
                             
-                            if pages:
-                                page = pages[0]
-                            else:
-                                context = await browser.new_context()
-                                page = await context.new_page()
+                            if browser_use_result.get("extracted_data"):
+                                response_text += f"**📊 Data Extracted**: Found valuable information on the page\n\n"
                             
-                            # Navigate to URL if specified
-                            if extracted_url:
-                                await page.goto(extracted_url, wait_until="domcontentloaded", timeout=30000)
-                                await asyncio.sleep(2)
-                                action_results.append(f"✅ Navigated to {extracted_url}")
-                            
-                            # Perform scrolling if requested
-                            if "scroll" in user_msg_lower:
-                                direction = "down" if "down" in user_msg_lower else "up"
-                                if direction == "down":
-                                    await page.evaluate("window.scrollBy(0, window.innerHeight * 2)")
-                                else:
-                                    await page.evaluate("window.scrollBy(0, -window.innerHeight * 2)")
-                                await asyncio.sleep(1)
-                                action_results.append(f"✅ Scrolled {direction}")
-                            
-                            # Extract data if requested
-                            if "extract" in user_msg_lower or "data" in user_msg_lower or "leaderboard" in user_msg_lower:
-                                try:
-                                    # Extract common data elements
-                                    title = await page.title()
-                                    extracted_data["page_title"] = title
-                                    
-                                    # Try to extract tables (common for leaderboards)
-                                    tables = await page.query_selector_all("table")
-                                    if tables:
-                                        table_data = []
-                                        for i, table in enumerate(tables[:3]):  # Limit to first 3 tables
-                                            rows = await table.query_selector_all("tr")
-                                            table_rows = []
-                                            for row in rows[:10]:  # Limit to first 10 rows
-                                                cells = await row.query_selector_all("td, th")
-                                                row_data = []
-                                                for cell in cells:
-                                                    text = await cell.text_content()
-                                                    row_data.append(text.strip() if text else "")
-                                                if row_data:
-                                                    table_rows.append(row_data)
-                                            if table_rows:
-                                                table_data.append(table_rows)
-                                        
-                                        if table_data:
-                                            extracted_data["tables"] = table_data
-                                            action_results.append(f"✅ Extracted {len(table_data)} tables with data")
-                                    
-                                    # Try to extract lists
-                                    lists = await page.query_selector_all("ul, ol")
-                                    if lists:
-                                        list_data = []
-                                        for i, ul in enumerate(lists[:3]):  # Limit to first 3 lists
-                                            items = await ul.query_selector_all("li")
-                                            list_items = []
-                                            for item in items[:20]:  # Limit to first 20 items
-                                                text = await item.text_content()
-                                                if text and text.strip():
-                                                    list_items.append(text.strip())
-                                            if list_items:
-                                                list_data.append(list_items)
-                                        
-                                        if list_data:
-                                            extracted_data["lists"] = list_data
-                                            action_results.append(f"✅ Extracted {len(list_data)} lists with data")
-                                    
-                                    # Extract text content from main containers
-                                    main_selectors = [".leaderboard", ".rankings", ".stats", ".data", "main", ".content"]
-                                    for selector in main_selectors:
-                                        elements = await page.query_selector_all(selector)
-                                        if elements:
-                                            content = []
-                                            for elem in elements[:2]:  # Limit to first 2 elements
-                                                text = await elem.text_content()
-                                                if text and len(text.strip()) > 20:
-                                                    content.append(text.strip()[:500])  # Limit text length
-                                            if content:
-                                                extracted_data[selector.replace(".", "")] = content
-                                                break
-                                    
-                                except Exception as extract_error:
-                                    action_results.append(f"⚠️ Data extraction partial: {str(extract_error)}")
-                            
-                            # Take screenshot
-                            screenshot_bytes = await page.screenshot(type="png", full_page=False)
-                            screenshot_data = base64.b64encode(screenshot_bytes).decode('utf-8')
-                            action_results.append("✅ Screenshot captured")
-                            
-                            # Success response with extracted data
-                            response_text = f"✅ **Browser Task Completed Successfully!**\n\n**What I did**: {request.message}\n\n"
-                            
-                            if action_results:
-                                response_text += f"**Actions performed**:\n"
-                                for result in action_results:
-                                    response_text += f"• {result}\n"
-                                response_text += "\n"
-                            
-                            if extracted_data:
-                                response_text += f"📊 **Data Successfully Extracted**:\n"
-                                for key, value in extracted_data.items():
-                                    if isinstance(value, list) and len(value) > 0:
-                                        response_text += f"• **{key.replace('_', ' ').title()}**: {len(value)} items found\n"
-                                    elif isinstance(value, str):
-                                        response_text += f"• **{key.replace('_', ' ').title()}**: {value[:100]}...\n"
-                                response_text += "\n"
-                            
+                            response_text += f"**🔗 Real-time View**: {browser_use_result.get('vnc_url', 'Available')}\n\n"
                             response_text += "**What's next?** I can:\n"
-                            response_text += "• Extract more specific data from this page\n"
+                            response_text += "• Continue browsing this site\n"
+                            response_text += "• Extract more specific data\n"
                             response_text += "• Navigate to related pages\n"
-                            response_text += "• Save this data to a file\n"
-                            response_text += "• Perform additional analysis"
-                            
-                            browser_use_result = {
-                                "success": True,
-                                "task": request.message,
-                                "result": f"Completed browser automation with {len(action_results)} actions",
-                                "extracted_data": extracted_data,
-                                "actions": action_results,
-                                "vnc_url": vnc_url,
-                                "timestamp": datetime.utcnow().isoformat()
-                            }
-                            
-                        except Exception as browser_error:
-                            logger.error(f"Browser automation error: {str(browser_error)}")
-                            response_text = f"⚠️ **Browser Task Encountered an Issue**\n\n**Error**: {str(browser_error)}\n\n**Let me try a different approach**. You can:\n• Rephrase your request more specifically\n• Ask me to try with a different strategy\n• Check the browser session status"
-                            
-                            browser_use_result = {
-                                "success": False,
-                                "task": request.message,
-                                "error": str(browser_error),
-                                "vnc_url": vnc_url,
-                                "timestamp": datetime.utcnow().isoformat()
-                            }
+                            response_text += "• Save or analyze the data"
+                        else:
+                            error_msg = browser_use_result.get("error", "Unknown error")
+                            response_text = f"⚠️ **Browser automation encountered an issue**\n\n**Error**: {error_msg}\n\n**Let me try a different approach**. You can:\n• Rephrase your request more specifically\n• Try with a simpler task first\n• Check if the website is accessible"
+                        
+                        # Set VNC URL for frontend
+                        vnc_url = browser_use_result.get("vnc_url")
+                        
+                    except Exception as browser_use_error:
+                        logger.error(f"Browser-use execution error: {str(browser_use_error)}")
+                        response_text = f"⚠️ **Browser automation system error**: {str(browser_use_error)}\n\n**Falling back to standard browser automation...**"
+                        
+                        # Fallback to legacy system
+                        browser_use_result = {
+                            "success": False,
+                            "task": request.message,
+                            "error": str(browser_use_error),
+                            "vnc_url": vnc_url,
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "fallback_used": True
+                        }
                 
             except Exception as e:
                 logger.error(f"Enhanced browser automation error: {str(e)}")
-                response_text = f"⚠️ **Browser automation encountered an issue**: {str(e)}\n\n**Let me help you with something else instead.**"
+                response_text = f"⚠️ **Browser automation encountered an error**: {str(e)}\n\n**Let me help you with something else instead.**"
                 browser_use_result = {
                     "success": False,
                     "task": request.message,
