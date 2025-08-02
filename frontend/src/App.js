@@ -353,14 +353,30 @@ export default function App() {
   const [error, setError] = useState(null);
   const [showBrowser, setShowBrowser] = useState(false);
   const [projects, setProjects] = useState([]);
+  const [vncUrl, setVncUrl] = useState("http://localhost:6080/vnc.html");
+  const [browserUseResult, setBrowserUseResult] = useState(null);
 
   useEffect(() => {
     // Generate session ID on mount
     setSessionId(generateSessionId());
+    // Load VNC info
+    loadVNCInfo();
   }, []);
 
   const generateSessionId = () => {
     return 'session_' + Math.random().toString(36).substr(2, 9);
+  };
+
+  const loadVNCInfo = async () => {
+    try {
+      const response = await fetch(`${API}/vnc-info`);
+      if (response.ok) {
+        const vncInfo = await response.json();
+        setVncUrl(vncInfo.vnc_url);
+      }
+    } catch (error) {
+      console.error("Error loading VNC info:", error);
+    }
   };
 
   const createSession = async () => {
@@ -393,14 +409,18 @@ export default function App() {
     setSessionId(generateSessionId());
     setShowBrowser(false);
     setProjects([]);
+    setBrowserUseResult(null);
   };
 
   const handleScreenshotUpdate = (newScreenshot) => {
     setScreenshot(newScreenshot);
   };
 
-  const handleBrowserToggle = (needsBrowser) => {
+  const handleBrowserToggle = (needsBrowser, browserResult = null) => {
     setShowBrowser(needsBrowser);
+    if (browserResult) {
+      setBrowserUseResult(browserResult);
+    }
   };
 
   const handleProjectCreated = (projectData) => {
@@ -412,7 +432,7 @@ export default function App() {
       <div className="app-header">
         <div className="app-title">
           <span className="title-icon">⚡</span>
-          AI Full-Stack Developer
+          AI Full-Stack Developer + Browser-Use
         </div>
         <div className="header-info">
           {projects.length > 0 && (
@@ -421,6 +441,11 @@ export default function App() {
               {projects.length} project{projects.length !== 1 ? 's' : ''}
             </div>
           )}
+          <div className="vnc-info">
+            <a href={vncUrl} target="_blank" rel="noopener noreferrer" className="vnc-link">
+              🔴 Live Browser
+            </a>
+          </div>
           <div className="session-controls">
             {!wsEndpoint ? (
               <button 
@@ -481,9 +506,9 @@ export default function App() {
         
         {showBrowser && (
           <div className="browser-panel">
-            <BrowserView 
-              wsEndpoint={wsEndpoint}
-              screenshot={screenshot}
+            <VNCBrowserView 
+              vnc_url={vncUrl}
+              browser_use_result={browserUseResult}
             />
           </div>
         )}
